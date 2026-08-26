@@ -1,15 +1,19 @@
-import { useEffect, useRef } from "react"
+import { useMemo } from "react"
+import { AgGridReact } from "ag-grid-react"
 import {
   AllCommunityModule,
   ModuleRegistry,
-  createGrid,
   themeBalham,
 } from "ag-grid-community"
 import { Loader } from "./Loader"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
-const rowHeights = { compact: 32, standard: 44, comfortable: 56 }
+const rowHeights = {
+  compact: 32,
+  standard: 44,
+  comfortable: 56,
+}
 
 interface DynamicTableProps {
   rowData: any[]
@@ -33,9 +37,7 @@ export default function DynamicTable({
   columnDefs,
   onGridReady,
   rowSelection,
-  pagination = true,
-  paginationPageSize = 50,
-  paginationPageSizeSelector = [25, 50, 100, 200],
+  pagination = false,
   onSelectionChanged,
   onCellValueChanged,
   rowClassRules,
@@ -44,29 +46,9 @@ export default function DynamicTable({
   density = "standard",
   context,
 }: DynamicTableProps) {
-  const gridDivRef = useRef<HTMLDivElement | null>(null)
-  const gridApiRef = useRef<any>(null)
-  const handlersRef = useRef({
-    onGridReady,
-    onSelectionChanged,
-    onCellValueChanged,
-    onRowClicked,
-  })
-
-  handlersRef.current = {
-    onGridReady,
-    onSelectionChanged,
-    onCellValueChanged,
-    onRowClicked,
-  }
-
-  useEffect(() => {
-    if (!gridDivRef.current) return
-
-    const api = createGrid(gridDivRef.current, {
-      columnDefs,
-      rowData,
-      theme: themeBalham.withParams({
+  const theme = useMemo(
+    () =>
+      themeBalham.withParams({
         accentColor: "#3b82f6",
         headerBackgroundColor: "#f8fafc",
         headerTextColor: "#334155",
@@ -76,83 +58,31 @@ export default function DynamicTable({
         wrapperBorderRadius: 8,
         rowHoverColor: "#f1f5f9",
       }),
-      defaultColDef: {
-        sortable: true,
-        filter: true,
-        floatingFilter: false,
-        resizable: true,
-        minWidth: 100,
-        editable: false,
-      },
-      rowSelection: rowSelection ?? {
+    [],
+  )
+
+  const defaultColDef = useMemo(
+    () => ({
+      sortable: true,
+      filter: true,
+      floatingFilter: false,
+      resizable: true,
+      minWidth: 100,
+      editable: false,
+    }),
+    [],
+  )
+
+  const resolvedRowSelection = useMemo(
+    () =>
+      rowSelection ?? {
         mode: "multiRow",
         checkboxes: true,
         headerCheckbox: true,
         enableClickSelection: false,
       },
-      pagination,
-      ...(pagination
-        ? {
-            paginationPageSize,
-            paginationPageSizeSelector,
-          }
-        : {
-            domLayout: "autoHeight",
-          }),
-      rowHeight: rowHeights[density],
-      animateRows: true,
-      rowBuffer: 20,
-      enableCellTextSelection: true,
-      ensureDomOrder: true,
-      rowClassRules,
-      context,
-      onSelectionChanged: (event: any) => {
-        handlersRef.current.onSelectionChanged?.(event)
-      },
-      onCellValueChanged: (event: any) => {
-        handlersRef.current.onCellValueChanged?.(event)
-      },
-      onRowClicked: (event: any) => {
-        handlersRef.current.onRowClicked?.(event)
-      },
-    } as any)
-
-    gridApiRef.current = api
-    handlersRef.current.onGridReady?.(api)
-
-    return () => {
-      api.destroy()
-      gridApiRef.current = null
-    }
-  }, [columnDefs])
-
-  useEffect(() => {
-    gridApiRef.current?.setGridOption("rowData", rowData)
-  }, [rowData])
-
-  useEffect(() => {
-    if (!gridApiRef.current) return
-
-    gridApiRef.current.setGridOption("pagination", pagination)
-
-    if (pagination) {
-      gridApiRef.current.setGridOption("domLayout", "normal")
-      gridApiRef.current.setGridOption("paginationPageSize", paginationPageSize)
-      gridApiRef.current.setGridOption(
-        "paginationPageSizeSelector",
-        paginationPageSizeSelector,
-      )
-    } else {
-      gridApiRef.current.setGridOption("domLayout", "autoHeight")
-    }
-  }, [pagination, paginationPageSize, paginationPageSizeSelector])
-
-  useEffect(() => {
-    if (!gridApiRef.current) return
-
-    gridApiRef.current.setGridOption("rowHeight", rowHeights[density])
-    gridApiRef.current.resetRowHeights()
-  }, [density])
+    [rowSelection],
+  )
 
   return (
     <div
@@ -163,9 +93,27 @@ export default function DynamicTable({
           <Loader isText={false} />
         </div>
       )}
-      <div
-        ref={gridDivRef}
+
+      <AgGridReact
+        animateRows
         className={pagination ? "h-full w-full" : "w-full"}
+        columnDefs={columnDefs}
+        context={context}
+        defaultColDef={defaultColDef}
+        domLayout={pagination ? "normal" : "autoHeight"}
+        enableCellTextSelection
+        ensureDomOrder
+        onCellValueChanged={onCellValueChanged}
+        onGridReady={(params) => onGridReady?.(params.api)}
+        onRowClicked={onRowClicked}
+        onSelectionChanged={onSelectionChanged}
+        rowBuffer={20}
+        pagination={pagination}
+        rowClassRules={rowClassRules}
+        rowData={rowData}
+        rowHeight={rowHeights[density]}
+        rowSelection={resolvedRowSelection}
+        theme={theme}
       />
     </div>
   )
