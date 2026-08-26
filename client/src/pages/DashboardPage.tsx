@@ -1,33 +1,31 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { createPortal } from "react-dom"
-import { useAuth } from "@/context/AuthContext"
-import { useSalesPlanDashboard } from "@/hooks/useSalesPlanDashboard"
-import { useColumns, getCurrentTargetMonthOptions } from "@/components/column"
-import DynamicTable from "@/components/DynamicTable"
 import { salesPlanApi } from "@/api/salePlanApi"
-import { Spinner } from "@/components/ui/spinner"
-import { toast } from "sonner"
-import {
-  Search,
-  Plus,
-  Trash2,
-  CheckCircle2,
-  FileCheck,
-  Package,
-  Layers,
-  Database,
-  Info,
-  ArrowLeft,
-  Eye,
-  Edit2,
-  Loader2
-} from "lucide-react"
-import { BarChart, LineChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList, Line } from "recharts"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+import { useColumns } from "@/components/column"
+import DynamicTable from "@/components/DynamicTable"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/context/AuthContext"
+import { useSalesPlanDashboard } from "@/hooks/useSalesPlanDashboard"
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Database,
+  Edit2,
+  Eye,
+  FileCheck,
+  Layers,
+  Loader2,
+  Package,
+  Plus,
+  Search,
+  Trash2
+} from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
+import { CartesianGrid, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { toast } from "sonner"
 
 export const DashboardPage = () => {
   const { currentRegion, currentUserRole, currentUser } = useAuth()
@@ -56,36 +54,6 @@ export const DashboardPage = () => {
 
   // Creation Modal state for Bins
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [itemSearchText, setItemSearchText] = useState("")
-  const [itemSuggestions, setItemSuggestions] = useState<any[]>([])
-  const [selectedItem, setSelectedItem] = useState<any>(null)
-
-  // Edit Modal state for BIN SP tab row updating
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [selectedBinSpRow, setSelectedBinSpRow] = useState<any>(null)
-  const [editForm, setEditForm] = useState({
-    targetMonth: "",
-    emergencyFlag: 0,
-    compProductFlag: "FG"
-  })
-
-  // Recharts Chart State
-  const [monthlySalesData, setMonthlySalesData] = useState<any[]>([])
-  const [loadingChart, setLoadingChart] = useState(false)
-
-  const [binForm, setBinForm] = useState({
-    customerId: 0,
-    custName: "",
-    organizationId: 0,
-    org: "",
-    inventoryItemId: 0,
-    itemNo: "",
-    description: "",
-    tbrQty: 0,
-    binCat: "",
-    stockType: "FG",
-    binLocation: ""
-  })
 
   // Dialog States and Helpers
   const [mode, setMode] = useState<"create" | "edit">("create")
@@ -177,40 +145,6 @@ export const DashboardPage = () => {
     }
   }, [orderView])
 
-  // Fetch item details suggestions for create bin modal
-  useEffect(() => {
-    if (itemSearchText.trim().length >= 2) {
-      salesPlanApi.getInventoryItemDetails(itemSearchText)
-        .then((res) => {
-          setItemSuggestions((res as any).data || [])
-        })
-        .catch((err) => console.error("Error fetching items:", err))
-    } else {
-      setItemSuggestions([])
-    }
-  }, [itemSearchText])
-
-  // Fetch chart data when Customer, Item, and Org are resolved
-  const fetchMonthlyChart = useCallback(async (customerId: number, orgId: number, inventoryItemId: number) => {
-    setLoadingChart(true)
-    try {
-      const res = await salesPlanApi.getMonthlyQuantity(customerId, orgId, inventoryItemId)
-      setMonthlySalesData(res.data || [])
-    } catch (err) {
-      console.error("Failed to load chart data:", err)
-      setMonthlySalesData([])
-    } finally {
-      setLoadingChart(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (binForm.customerId && binForm.inventoryItemId && binForm.organizationId) {
-      fetchMonthlyChart(binForm.customerId, binForm.organizationId, binForm.inventoryItemId)
-    } else {
-      setMonthlySalesData([])
-    }
-  }, [binForm.customerId, binForm.inventoryItemId, binForm.organizationId, fetchMonthlyChart])
 
   // Item Autocomplete search for dialog form
   useEffect(() => {
@@ -301,7 +235,7 @@ export const DashboardPage = () => {
     setItemOrganization(null)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault()
     if (!form.INVENTORY_ITEM_ID || !form.ORGANIZATION_ID || !form.CUSTOMER_ID) {
       toast.error("Please fill in all required fields.")
@@ -384,80 +318,7 @@ export const DashboardPage = () => {
     }
   }
 
-  const handleItemSelect = async (item: any) => {
-    setSelectedItem(item)
-    setItemSearchText(item.ITEM_NO)
-    setItemSuggestions([])
 
-    // Fetch matching Org for this item in this region
-    try {
-      const region = s.activeRegion
-      const orgRes = await salesPlanApi.getOrgIdByInventoryIdAndOuId(item.INVENTORY_ITEM_ID, region)
-      const orgInfo = (orgRes as any).data
-      if (orgInfo) {
-        setBinForm((prev) => ({
-          ...prev,
-          inventoryItemId: item.INVENTORY_ITEM_ID,
-          itemNo: item.ITEM_NO,
-          description: item.DESCRIPTION || "",
-          organizationId: orgInfo.ORGANIZATION_ID,
-          org: orgInfo.ORG_CODE || ""
-        }))
-      } else {
-        setBinForm((prev) => ({
-          ...prev,
-          inventoryItemId: item.INVENTORY_ITEM_ID,
-          itemNo: item.ITEM_NO,
-          description: item.DESCRIPTION || ""
-        }))
-      }
-    } catch (err) {
-      console.error("Failed to fetch matching org details:", err)
-    }
-  }
-
-  const handleCreateBinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!binForm.inventoryItemId || !binForm.organizationId) {
-      toast.error("Please select a valid item and organization.")
-      return
-    }
-
-    try {
-      const customer = s.customerList.find((c: any) => c.CUSTOMER_ID === Number(binForm.customerId))
-      const finalForm = {
-        ...binForm,
-        customerId: binForm.customerId || null,
-        custName: customer ? customer.CUSTOMER_NAME : null,
-        region: s.subRegionStr || s.activeRegion,
-        createdBy: currentUser?.username || null
-      }
-
-      await salesPlanApi.createBinRecord(finalForm as any, currentUser?.username)
-      toast.success("Replenishment bin created successfully.")
-      setIsModalOpen(false)
-      // Reset form
-      setBinForm({
-        customerId: 0,
-        custName: "",
-        organizationId: 0,
-        org: "",
-        inventoryItemId: 0,
-        itemNo: "",
-        description: "",
-        tbrQty: 0,
-        binCat: "",
-        stockType: "FG",
-        binLocation: ""
-      })
-      setItemSearchText("")
-      // Reload rep bins
-      await s.loadRepBinData()
-    } catch (err: any) {
-      console.error(err)
-      toast.error(err.response?.data?.message || "Failed to create replenishment bin.")
-    }
-  }
 
   // Handle Search submit: queries data and changes subview to DETAILS
   const handleQuerySubmit = async (e: React.FormEvent) => {
@@ -496,37 +357,38 @@ export const DashboardPage = () => {
     }
   }
 
-  // BIN SP: row editing modal handlers
-  const openEditModal = (row: any) => {
-    setSelectedBinSpRow(row)
-    setEditForm({
-      targetMonth: row.TARGET_MON_FINAL || "",
-      emergencyFlag: Number(row.EMERGENCY_FLAG || 0),
-      compProductFlag: row.STOCK_TYPE || "FG"
+
+  // Action: Trigger edit modal dialog for updating replenishment bin
+  const handleUpdateBinQty = (row: any) => {
+    setMode("edit")
+    setSelectedRow(row)
+    setForm({
+      REP_ID: row.REP_ID,
+      ITEM_NO: row.ITEM_NO || "",
+      DESCRIPTION: row.DESCRIPTION || "",
+      ORG: row.ORG || "",
+      ORGANIZATION_ID: row.ORGANIZATION_ID || null,
+      INVENTORY_ITEM_ID: row.INVENTORY_ITEM_ID || null,
+      BIN_LOCATION: row.BIN_LOCATION || "",
+      CUSTOMER_NAME: row.CUSTOMER_NAME || "",
+      CUSTOMER_ID: row.CUSTOMER_ID || null,
+      REGION: row.REGION || "",
+      BIN_CATEGORY: row.BIN_CATEGORY || "",
+      ROQ: row.ROQ || 0,
+      STOCK_TYPE: row.STOCK_TYPE || "FG"
     })
-    setIsEditModalOpen(true)
+    if (row.ORGANIZATION_ID) {
+      setOrganizationOptions([{ OrganizationId: row.ORGANIZATION_ID, Organization: row.ORG }])
+      setItemOrganization({ OrganizationId: row.ORGANIZATION_ID, Organization: row.ORG })
+    }
+    setIsModalOpen(true)
   }
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedBinSpRow) return
-
-    try {
-      await salesPlanApi.updateBinData({
-        binLineId: selectedBinSpRow.REP_ID || selectedBinSpRow.BIN_LINE_ID,
-        targetMonth: editForm.targetMonth || null,
-        emergencyFlag: editForm.emergencyFlag,
-        compProductFlag: editForm.compProductFlag
-      })
-      toast.success("BIN SP row updated successfully.")
-      setIsEditModalOpen(false)
-      setSelectedBinSpRow(null)
-      // Refresh bins data
-      await s.loadRepBinData()
-    } catch (err: any) {
-      console.error(err)
-      toast.error(err.response?.data?.message || "Failed to update BIN SP row.")
-    }
+  // Action: Trigger delete confirmation modal dialog
+  const handleDeleteBinMaster = (row: any) => {
+    setDeleteRow(row)
+    setDeleteReason("")
+    setDeleteDialogOpen(true)
   }
 
   return (
@@ -879,7 +741,7 @@ export const DashboardPage = () => {
                       return (
                         <div className="flex items-center justify-center h-full">
                           <button
-                            onClick={() => openEditModal(params.data)}
+                            onClick={() => handleUpdateBinQty(params.data)}
                             title="Edit Row Data"
                             className="p-1 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-xs font-semibold"
                           >
@@ -917,298 +779,7 @@ export const DashboardPage = () => {
       </main>
 
       {/* Creation modal for replenishment bin (includes Recharts monthly quantity chart) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-none shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
-                <Plus className="h-4 w-4 text-blue-600" />
-                Create Replenishment Bin
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-0 flex flex-col lg:flex-row gap-0">
-              {/* Form Side */}
-              <form onSubmit={handleCreateBinSubmit} className="flex-1 space-y-4">
-                {/* Item lookup */}
-                <div className="relative flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Item Number</label>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Search by item no..."
-                      value={itemSearchText}
-                      onChange={(e) => {
-                        setItemSearchText(e.target.value)
-                        if (!e.target.value) {
-                          setSelectedItem(null)
-                        }
-                      }}
-                      className="w-full rounded-lg border border-slate-200 pl-9 pr-3 py-2 text-sm outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  {itemSuggestions.length > 0 && (
-                    <ul className="absolute left-0 right-0 top-[100%] bg-white border border-slate-200 rounded-lg shadow-lg z-[60] max-h-40 overflow-y-auto mt-1">
-                      {itemSuggestions.map((item) => (
-                        <li
-                          key={item.INVENTORY_ITEM_ID}
-                          onClick={() => handleItemSelect(item)}
-                          className="px-4 py-2 hover:bg-slate-100 cursor-pointer text-xs flex justify-between border-b border-slate-100 last:border-0"
-                        >
-                          <span className="font-semibold text-slate-700">{item.ITEM_NO}</span>
-                          <span className="text-slate-400 truncate max-w-[150px]">{item.DESCRIPTION}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                {selectedItem && (
-                  <div className="bg-blue-50/70 border border-blue-100 p-3 rounded-lg flex gap-2">
-                    <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-                    <div className="text-xs text-blue-700">
-                      <p className="font-bold">{selectedItem.ITEM_NO}</p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed">{selectedItem.DESCRIPTION}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Customer selection */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Customer</label>
-                  <select
-                    required
-                    value={binForm.customerId}
-                    onChange={(e) => setBinForm((prev) => ({ ...prev, customerId: Number(e.target.value) }))}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                  >
-                    <option value="">Select Customer</option>
-                    {s.customerList.map((cust) => (
-                      <option key={cust.CUSTOMER_ID} value={cust.CUSTOMER_ID}>
-                        {cust.CUSTOMER_NAME}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Organization</label>
-                    <input
-                      type="text"
-                      required
-                      readOnly
-                      placeholder="Auto-resolved org"
-                      value={binForm.org}
-                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Stock Type</label>
-                    <select
-                      value={binForm.stockType}
-                      onChange={(e) => setBinForm((prev) => ({ ...prev, stockType: e.target.value }))}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="FG">FG</option>
-                      <option value="FC">FC</option>
-                      <option value="RM">RM</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Bin Category</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Standard"
-                      value={binForm.binCat}
-                      onChange={(e) => setBinForm((prev) => ({ ...prev, binCat: e.target.value }))}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">ROQ / TBR Qty</label>
-                    <input
-                      type="number"
-                      required
-                      min={1}
-                      value={binForm.tbrQty || ""}
-                      onChange={(e) => setBinForm((prev) => ({ ...prev, tbrQty: Number(e.target.value) }))}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Bin Location</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Warehouse A1"
-                    value={binForm.binLocation}
-                    onChange={(e) => setBinForm((prev) => ({ ...prev, binLocation: e.target.value }))}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="pt-4 border-t border-slate-200 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 text-xs font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm"
-                  >
-                    Create Bin
-                  </button>
-                </div>
-              </form>
-
-              {/* Chart Side */}
-              <div className="w-full lg:w-72 bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between shrink-0">
-                <div>
-                  <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-2">
-                    Monthly Quantity History
-                  </h4>
-                  <p className="text-[10px] text-slate-400 mb-4 leading-relaxed">
-                    Visualizes 6-month invoiced sales quantity history for the selected combination.
-                  </p>
-                </div>
-
-                <div className="flex-1 flex items-center justify-center min-h-[160px]">
-                  {loadingChart ? (
-                    <div className="flex flex-col items-center gap-1.5">
-                      <Spinner className="h-5 w-5 text-blue-500 animate-spin" />
-                      <span className="text-[10px] text-slate-400">Loading chart data...</span>
-                    </div>
-                  ) : monthlySalesData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={160}>
-                      <BarChart data={monthlySalesData}>
-                        <XAxis dataKey="Month" stroke="#94a3b8" fontSize={9} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#94a3b8" fontSize={9} tickLine={false} axisLine={false} />
-                        <Tooltip contentStyle={{ fontSize: "10px", borderRadius: "6px" }} />
-                        <Bar dataKey="Sales" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="text-center py-6">
-                      <Info className="h-5 w-5 text-slate-300 mx-auto mb-1.5" />
-                      <p className="text-[10px] text-slate-400 italic">
-                        Select a customer and item to trace monthly statistics.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Row Edit Modal for BIN SP */}
-      {isEditModalOpen && selectedBinSpRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
-                <Edit2 className="h-4 w-4 text-blue-600" />
-                Update BIN SP Row
-              </h3>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
-              >
-                &times;
-              </button>
-            </div>
-
-            <form onSubmit={handleEditSubmit} className="p-0 space-y-4">
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-1 text-slate-600">
-                <p><span className="font-semibold text-slate-700">Item No:</span> {selectedBinSpRow.ITEM_NO}</p>
-                <p><span className="font-semibold text-slate-700">Customer:</span> {selectedBinSpRow.CUSTOMER_NAME}</p>
-              </div>
-
-              {/* Target Month Select */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Month</label>
-                <select
-                  required
-                  value={editForm.targetMonth}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, targetMonth: e.target.value }))}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                >
-                  <option value="">Select Month</option>
-                  {getCurrentTargetMonthOptions().map((opt: any) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Stock Type Select */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Stock Type</label>
-                <select
-                  required
-                  value={editForm.compProductFlag}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, compProductFlag: e.target.value }))}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                >
-                  <option value="FG">FG</option>
-                  <option value="FC">FC</option>
-                  <option value="RM">RM</option>
-                </select>
-              </div>
-
-              {/* Emergency Flag Select */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Emergency Bin Flag</label>
-                <select
-                  value={editForm.emergencyFlag}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, emergencyFlag: Number(e.target.value) }))}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                >
-                  <option value={0}>Normal Bin</option>
-                  <option value={1}>Emergency Bin</option>
-                </select>
-              </div>
-
-              <div className="pt-4 border-t border-slate-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm"
-                >
-                  Update Row
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogContent className="max-h-[calc(100vh-2rem)] content-start overflow-hidden sm:max-w-200">
               <DialogHeader className="flex-row items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -1804,8 +1375,6 @@ export const DashboardPage = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      )}
     </div>
   )
 }
