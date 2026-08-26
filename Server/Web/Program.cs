@@ -35,11 +35,12 @@ try
 
     var oracleService = new OracleService();
     var connectionString = oracleService.GetConnectionString();
-
     builder.Services.AddSingleton(oracleService);
-    builder.Services.AddScoped(sp => new AppOracleDbConnectionFactory(connectionString));
 
-    builder.Services.AddDynamicQueryInfrastructure<AppOracleDbConnectionFactory>();
+    builder.Services.AddScoped<DynamicTransaction.Interfaces.IDynamicQueryExecutor, DynamicTransaction.Services.DynamicQueryExecutor>();
+    builder.Services.AddScoped<AppOracleDbConnectionFactory>(sp => new AppOracleDbConnectionFactory(connectionString));
+    builder.Services.AddScoped<DynamicTransaction.Interfaces.IDbConnectionFactory>(sp => sp.GetRequiredService<AppOracleDbConnectionFactory>());
+    builder.Services.AddSingleton<Serilog.ILogger>(Log.Logger);
 
     builder.Services.AddScoped<IAuthServices, AuthServices>();
     builder.Services.AddScoped<ISalesPlanServices, SalesPlanService>();

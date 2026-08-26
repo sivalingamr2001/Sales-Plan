@@ -3,6 +3,7 @@ import {
   AllCommunityModule,
   ModuleRegistry,
   createGrid,
+  themeBalham,
   themeQuartz,
 } from "ag-grid-community"
 import { Loader } from "./Loader"
@@ -54,7 +55,7 @@ export default function DynamicTable({
     const api = createGrid(gridDivRef.current, {
       columnDefs,
       rowData,
-      theme: themeQuartz.withParams({
+      theme: themeBalham.withParams({
         accentColor: "#3b82f6", // tailwind blue-500
         headerBackgroundColor: "#f8fafc", // tailwind slate-50
         headerTextColor: "#334155", // tailwind slate-700
