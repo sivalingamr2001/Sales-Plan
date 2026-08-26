@@ -13,33 +13,39 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     Log.Information("Starting Web API host...");
-
     var builder = WebApplication.CreateBuilder(args);
+
     builder.Host.UseSerilog();
 
-    // Add services to the container.
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AllowAll", policy =>
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+    });
+
     builder.Services.AddControllers()
-        .AddNewtonsoftJson(); // To support JObject parameters model binding
+        .AddNewtonsoftJson();
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
 
-    // Get Connection String via external ConnectionDll wrapper
     var oracleService = new OracleService();
     var connectionString = oracleService.GetConnectionString();
+
     builder.Services.AddSingleton(oracleService);
+    builder.Services.AddScoped(sp => new AppOracleDbConnectionFactory(connectionString));
 
-    // Register DynamicTransaction library dependency injection
     builder.Services.AddDynamicQueryInfrastructure<AppOracleDbConnectionFactory>();
-    builder.Services.AddScoped<AppOracleDbConnectionFactory>(sp => new AppOracleDbConnectionFactory(connectionString));
-    builder.Services.AddScoped<DynamicTransaction.Interfaces.IDbConnectionFactory>(sp => sp.GetRequiredService<AppOracleDbConnectionFactory>());
 
-    // Register application services
+    builder.Services.AddScoped<IAuthServices, AuthServices>();
     builder.Services.AddScoped<ISalesPlanServices, SalesPlanService>();
 
     var app = builder.Build();
 
-    // Configure the HTTP request pipeline.
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
@@ -47,9 +53,8 @@ try
     }
 
     app.UseHttpsRedirection();
-
+    app.UseCors("AllowAll");
     app.UseAuthorization();
-
     app.MapControllers();
 
     app.Run();

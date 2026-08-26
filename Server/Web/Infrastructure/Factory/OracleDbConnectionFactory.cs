@@ -5,9 +5,6 @@ using System.Data.Common;
 
 namespace ServerInfrastructure.Data;
 
-/// <summary>
-/// Fixes missing OracleConnectionWrapper by embedding it directly inside your factory assembly.
-/// </summary>
 public sealed class OracleConnectionWrapper : IAsyncDbConnectionWrapper
 {
     public IDbConnection Connection { get; }
@@ -35,9 +32,6 @@ public sealed class OracleConnectionWrapper : IAsyncDbConnectionWrapper
     }
 }
 
-/// <summary>
-/// Implements your base IDbConnectionFactory cleanly to resolve casting/delegate convert issues.
-/// </summary>
 public sealed class AppOracleDbConnectionFactory : IDbConnectionFactory
 {
     private readonly string _connectionString;
