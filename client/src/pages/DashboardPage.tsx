@@ -393,51 +393,50 @@ export const DashboardPage = () => {
 
   return (
     <div className="flex h-full flex-col bg-slate-50">
-      {/* Portal destination slot rendering for tabs */}
       {filterSlot && createPortal(
-        <div className="flex bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
+        <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 shrink-0">
           <button
             onClick={() => {
               setFilterMode("ORDER")
               setOrderView("CONSOLIDATED")
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterMode === "ORDER"
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "ORDER"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-slate-600 hover:text-slate-900"
               }`}
           >
-            <Layers className="h-3.5 w-3.5" />
+            <Layers className="h-3 w-3" />
             ORDER
           </button>
           <button
             onClick={() => setFilterMode("BIN MASTER")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterMode === "BIN MASTER"
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "BIN MASTER"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-slate-600 hover:text-slate-900"
               }`}
           >
-            <Database className="h-3.5 w-3.5" />
+            <Database className="h-3 w-3" />
             BIN MASTER
           </button>
           <button
             onClick={() => setFilterMode("BIN SP")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterMode === "BIN SP"
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "BIN SP"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-slate-600 hover:text-slate-900"
               }`}
           >
-            <Package className="h-3.5 w-3.5" />
+            <Package className="h-3 w-3" />
             BIN SP
           </button>
           {canViewPendingBin && (
             <button
               onClick={() => setFilterMode("SP BIN PEND")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterMode === "SP BIN PEND"
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "SP BIN PEND"
                 ? "bg-white text-blue-600 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
                 }`}
             >
-              <CheckCircle2 className="h-3.5 w-3.5" />
+              <CheckCircle2 className="h-3 w-3" />
               SP BIN PEND
             </button>
           )}
