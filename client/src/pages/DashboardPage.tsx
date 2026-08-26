@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { useAuth } from "@/context/AuthContext"
 import { useSalesPlanDashboard } from "@/hooks/useSalesPlanDashboard"
 import {
@@ -51,6 +53,19 @@ export const DashboardPage = () => {
 
   // Grid APIs for capturing selections
   const [orderGridApi, setOrderGridApi] = useState<any>(null)
+  const [binGridApi, setBinGridApi] = useState<any>(null)
+  const [isBulkDelete, setIsBulkDelete] = useState(false)
+
+  const subRegions = useMemo(() => {
+    if (currentRegion?.region === "HO") {
+      return ["SOUTH", "NORTH", "EAST", "WEST"]
+    }
+    if (!currentRegion?.subRegion) return []
+    return currentRegion.subRegion
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }, [currentRegion])
 
   // Creation Modal state for Bins
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -186,28 +201,28 @@ export const DashboardPage = () => {
         form.ORGANIZATION_ID,
         form.INVENTORY_ITEM_ID
       )
-      .then((res: any) => {
-        const salesData = res.data || []
-        setMonthlySales(salesData)
-        if (salesData.length > 0) {
-          const total = salesData.reduce((sum: number, entry: any) => sum + (Number(entry.SALES) || 0), 0)
-          const avg = (total / salesData.length).toFixed(1)
-          setAhoAverage(avg)
-          const firstMonth = salesData[0]?.MONTH || ""
-          const lastMonth = salesData[salesData.length - 1]?.MONTH || ""
-          setTrendYears(`${firstMonth} - ${lastMonth}`)
-        } else {
+        .then((res: any) => {
+          const salesData = res.data || []
+          setMonthlySales(salesData)
+          if (salesData.length > 0) {
+            const total = salesData.reduce((sum: number, entry: any) => sum + (Number(entry.SALES) || 0), 0)
+            const avg = (total / salesData.length).toFixed(1)
+            setAhoAverage(avg)
+            const firstMonth = salesData[0]?.MONTH || ""
+            const lastMonth = salesData[salesData.length - 1]?.MONTH || ""
+            setTrendYears(`${firstMonth} - ${lastMonth}`)
+          } else {
+            setAhoAverage(0)
+            setTrendYears("")
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load monthly sales trend:", err)
+          setMonthlySales([])
           setAhoAverage(0)
           setTrendYears("")
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load monthly sales trend:", err)
-        setMonthlySales([])
-        setAhoAverage(0)
-        setTrendYears("")
-      })
-      .finally(() => setMonthlySalesLoading(false))
+        })
+        .finally(() => setMonthlySalesLoading(false))
     } else {
       setMonthlySales([])
       setAhoAverage(0)
@@ -294,14 +309,38 @@ export const DashboardPage = () => {
   }
 
   const handleConfirmDelete = async () => {
-    if (!deleteRow) return
     setDeleting(true)
     try {
-      await salesPlanApi.deleteBinMasterData({
-        REP_ID: deleteRow.REP_ID,
-        reason: deleteReason
-      })
-      toast.success("Replenishment bin deleted successfully.")
+      if (isBulkDelete) {
+        if (!binGridApi) return
+        const selectedRows = binGridApi.getSelectedRows()
+        if (selectedRows.length === 0) {
+          toast.error("No rows selected for deletion.")
+          return
+        }
+        let successCount = 0
+        for (const row of selectedRows) {
+          try {
+            await salesPlanApi.deleteBinMasterData({
+              REP_ID: row.REP_ID,
+              reason: deleteReason
+            })
+            successCount++
+          } catch (err) {
+            console.error(`Failed to delete bin ${row.REP_ID}:`, err)
+          }
+        }
+        if (successCount > 0) {
+          toast.success(`${successCount} replenishment bin(s) deleted successfully.`)
+        }
+      } else {
+        if (!deleteRow) return
+        await salesPlanApi.deleteBinMasterData({
+          REP_ID: deleteRow.REP_ID,
+          reason: deleteReason
+        })
+        toast.success("Replenishment bin deleted successfully.")
+      }
       setDeleteDialogOpen(false)
       setDeleteRow(null)
       setDeleteReason("")
@@ -315,7 +354,45 @@ export const DashboardPage = () => {
       toast.error("Failed to delete replenishment bin.")
     } finally {
       setDeleting(false)
+      setIsBulkDelete(false)
     }
+  }
+
+  const handleBulkApproveBins = async () => {
+    if (!binGridApi) return
+    const selectedRows = binGridApi.getSelectedRows()
+    if (selectedRows.length === 0) {
+      toast.error("Please select at least one row to approve.")
+      return
+    }
+    setSubmitting(true)
+    let successCount = 0
+    for (const row of selectedRows) {
+      try {
+        await s.approveRepBinRecord(row)
+        successCount++
+      } catch (err) {
+        console.error(`Failed to approve bin ${row.REP_ID}:`, err)
+      }
+    }
+    setSubmitting(false)
+    if (successCount > 0) {
+      toast.success(`${successCount} bin(s) approved successfully.`)
+    }
+    await s.loadPendingRepBinData()
+  }
+
+  const handleBulkDeleteTrigger = () => {
+    if (!binGridApi) return
+    const selectedRows = binGridApi.getSelectedRows()
+    if (selectedRows.length === 0) {
+      toast.error("Please select at least one row to delete.")
+      return
+    }
+    setIsBulkDelete(true)
+    setDeleteRow(null)
+    setDeleteReason("")
+    setDeleteDialogOpen(true)
   }
 
 
@@ -395,7 +472,7 @@ export const DashboardPage = () => {
     <div className="flex h-full flex-col bg-slate-50">
       {filterSlot && createPortal(
         <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 shrink-0">
-          <button
+          <Button
             onClick={() => {
               setFilterMode("ORDER")
               setOrderView("CONSOLIDATED")
@@ -407,8 +484,8 @@ export const DashboardPage = () => {
           >
             <Layers className="h-3 w-3" />
             ORDER
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setFilterMode("BIN MASTER")}
             className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "BIN MASTER"
               ? "bg-white text-blue-600 shadow-sm"
@@ -417,8 +494,8 @@ export const DashboardPage = () => {
           >
             <Database className="h-3 w-3" />
             BIN MASTER
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setFilterMode("BIN SP")}
             className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "BIN SP"
               ? "bg-white text-blue-600 shadow-sm"
@@ -427,9 +504,9 @@ export const DashboardPage = () => {
           >
             <Package className="h-3 w-3" />
             BIN SP
-          </button>
+          </Button>
           {canViewPendingBin && (
-            <button
+            <Button
               onClick={() => setFilterMode("SP BIN PEND")}
               className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${filterMode === "SP BIN PEND"
                 ? "bg-white text-blue-600 shadow-sm"
@@ -438,7 +515,7 @@ export const DashboardPage = () => {
             >
               <CheckCircle2 className="h-3 w-3" />
               SP BIN PEND
-            </button>
+            </Button>
           )}
         </div>,
         filterSlot
@@ -450,70 +527,69 @@ export const DashboardPage = () => {
           <form onSubmit={handleQuerySubmit} className="flex flex-wrap gap-3 items-center">
             <div className="flex flex-col gap-1 min-w-[180px]">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Sub Region</label>
-              <select
+              <NativeSelect
                 value={s.selectedSubRegion}
                 onChange={(e) => s.setSelectedSubRegion(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium outline-none focus:border-blue-500 focus:bg-white"
+                className="w-full"
               >
-                <option value="">Select Sub-Region</option>
-                <option value="SOUTH">SOUTH</option>
-                <option value="NORTH">NORTH</option>
-                <option value="EAST">EAST</option>
-                <option value="WEST">WEST</option>
-              </select>
+                <NativeSelectOption value="">Select Sub-Region</NativeSelectOption>
+                {subRegions.map((subReg) => (
+                  <NativeSelectOption key={subReg} value={subReg}>
+                    {subReg}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
             </div>
 
             <div className="flex flex-col gap-1 min-w-[200px]">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Customer</label>
-              <select
+              <NativeSelect
                 value={s.selectedCustomer}
                 onChange={(e) => s.setSelectedCustomer(e.target.value)}
                 disabled={!s.selectedSubRegion || s.loadingCustomers}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium outline-none focus:border-blue-500 focus:bg-white disabled:opacity-50"
+                className="w-full"
               >
-                <option value="">All Customers</option>
+                <NativeSelectOption value="">All Customers</NativeSelectOption>
                 {s.customerList.map((cust) => (
-                  <option key={cust.CUSTOMER_ID} value={cust.CUSTOMER_NAME}>
+                  <NativeSelectOption key={cust.CUSTOMER_ID} value={cust.CUSTOMER_NAME}>
                     {cust.CUSTOMER_NAME}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             <div className="flex flex-col gap-1 min-w-[200px]">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Ordered Item / Order No</label>
               <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                <input
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <Input
                   type="text"
                   placeholder="Enter code or number"
                   value={s.orderedItemInput}
                   onChange={(e) => s.setOrderedItemInput(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs font-medium outline-none focus:border-blue-500 focus:bg-white"
+                  className="pl-8 h-7 text-xs"
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-2 mt-4">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="includeBinCheck"
                 checked={s.includeBin}
-                onChange={(e) => s.setIncludeBin(e.target.checked)}
-                className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 border-slate-300"
+                onCheckedChange={(checked) => s.setIncludeBin(!!checked)}
               />
               <label htmlFor="includeBinCheck" className="text-xs font-semibold text-slate-600 cursor-pointer">
                 Include Bin SP Data
               </label>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={s.loadingConsolidated}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2 rounded-lg mt-4 shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+              className="mt-4 h-7 text-xs px-3"
             >
               Query Plan
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -526,7 +602,7 @@ export const DashboardPage = () => {
             <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {orderView !== "CONSOLIDATED" && (
-                  <button
+                  <Button
                     onClick={() => {
                       setOrderView("CONSOLIDATED")
                     }}
@@ -534,7 +610,7 @@ export const DashboardPage = () => {
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Back
-                  </button>
+                  </Button>
                 )}
                 <span className="text-xs font-bold text-slate-600 uppercase flex items-center gap-1.5">
                   <Layers className="h-4 w-4 text-slate-500" />
@@ -546,23 +622,23 @@ export const DashboardPage = () => {
               </div>
 
               {orderView === "CONSOLIDATED" && (
-                <button
+                <Button
                   onClick={() => setOrderView("FULL_BREAKUP")}
                   className="bg-slate-700 hover:bg-slate-800 text-white font-semibold text-[10px] uppercase px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1"
                 >
                   <Eye className="h-3.5 w-3.5" />
                   Full Breakup View
-                </button>
+                </Button>
               )}
 
               {orderView === "DETAILS" && (
-                <button
+                <Button
                   onClick={handleSaveOrders}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1 rounded-md shadow-sm transition-all flex items-center gap-1"
                 >
                   <FileCheck className="h-3.5 w-3.5" />
                   Save Sales Plan
-                </button>
+                </Button>
               )}
             </div>
 
@@ -624,30 +700,52 @@ export const DashboardPage = () => {
                 {showPendingBins ? "Approval Pending Replenishment Bins" : "Active Replenishment Bins"}
               </span>
 
-              <div className="flex items-center gap-3">
-                <button
+              <div className="flex items-center gap-2">
+                {showPendingBins && (
+                  <>
+                    <Button
+                      onClick={handleBulkApproveBins}
+                      variant="outline"
+                      className="text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700 h-7 text-xs px-2.5"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Approve Selected
+                    </Button>
+                    <Button
+                      onClick={handleBulkDeleteTrigger}
+                      variant="destructive"
+                      className="h-7 text-xs px-2.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete Selected
+                    </Button>
+                  </>
+                )}
+                <Button
                   onClick={() => setShowPendingBins((p) => !p)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition-all"
+                  variant="outline"
+                  className="h-7 text-xs px-2.5"
                 >
                   {showPendingBins ? "Show Active Bins" : "Show Pending Bins"}
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => {
                     setMode("create")
                     handleClearForm()
                     setIsModalOpen(true)
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1"
+                  className="h-7 text-xs px-2.5"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Create New Bin
-                </button>
+                </Button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0">
               <DynamicTable
                 rowData={s.repBinData}
+                onGridReady={(api) => setBinGridApi(api)}
                 columnDefs={[
                   ...cols.binColumns,
                   {
@@ -658,15 +756,15 @@ export const DashboardPage = () => {
                       return (
                         <div className="flex items-center gap-2 h-full">
                           {showPendingBins ? (
-                            <button
+                            <Button
                               onClick={() => handleApproveBin(params.data)}
                               title="Approve Bin"
                               className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
                             >
                               <CheckCircle2 className="h-4 w-4" />
-                            </button>
+                            </Button>
                           ) : (
-                            <button
+                            <Button
                               onClick={() => {
                                 setMode("edit")
                                 setSelectedRow(params.data)
@@ -695,19 +793,15 @@ export const DashboardPage = () => {
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                             >
                               <FileCheck className="h-4 w-4" />
-                            </button>
+                            </Button>
                           )}
-                          <button
-                            onClick={() => {
-                              setDeleteRow(params.data)
-                              setDeleteReason("")
-                              setDeleteDialogOpen(true)
-                            }}
+                          <Button
+                            onClick={() => handleDeleteBinMaster(params.data)}
                             title="Delete Master Bin"
                             className="p-1 text-red-600 hover:bg-red-50 rounded"
                           >
                             <Trash2 className="h-4 w-4" />
-                          </button>
+                          </Button>
                         </div>
                       )
                     }
@@ -739,14 +833,14 @@ export const DashboardPage = () => {
                     cellRenderer: (params: any) => {
                       return (
                         <div className="flex items-center justify-center h-full">
-                          <button
+                          <Button
                             onClick={() => handleUpdateBinQty(params.data)}
                             title="Edit Row Data"
                             className="p-1 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-xs font-semibold"
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                             Edit
-                          </button>
+                          </Button>
                         </div>
                       )
                     }
@@ -779,218 +873,218 @@ export const DashboardPage = () => {
 
       {/* Creation modal for replenishment bin (includes Recharts monthly quantity chart) */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogContent className="max-h-[calc(100vh-2rem)] content-start overflow-hidden sm:max-w-200">
-              <DialogHeader className="flex-row items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <DialogTitle>
-                    {mode === "create" ? "Create" : "Update"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {mode === "create"
-                      ? "Create a new bin record for a customer and item combination"
-                      : "Update the ROQ for the selected bin record"}
-                    <span className="ml-1 inline font-semibold text-blue-900">
-                      {selectedRow?.ITEM_NO}
-                    </span>
-                  </DialogDescription>
-                </div>
-                <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                  <Button
-                    variant="outline"
-                    onClick={handleClearForm}
-                    disabled={submitting}
-                  >
-                    Clear
-                  </Button>
-                  <Button onClick={handleSubmit} disabled={submitting}>
-                    {submitting
-                      ? "Saving..."
-                      : mode === "create"
-                        ? "Create Rep Bin"
-                        : "Save Changes"}
-                  </Button>
-                </div>
-              </DialogHeader>
+        <DialogContent className="max-h-[calc(100vh-2rem)] content-start overflow-hidden sm:max-w-200">
+          <DialogHeader className="flex-row items-start justify-between gap-4">
+            <div className="min-w-0">
+              <DialogTitle>
+                {mode === "create" ? "Create" : "Update"}
+              </DialogTitle>
+              <DialogDescription>
+                {mode === "create"
+                  ? "Create a new bin record for a customer and item combination"
+                  : "Update the ROQ for the selected bin record"}
+                <span className="ml-1 inline font-semibold text-blue-900">
+                  {selectedRow?.ITEM_NO}
+                </span>
+              </DialogDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 pt-0.5">
+              <Button
+                variant="outline"
+                onClick={handleClearForm}
+                disabled={submitting}
+              >
+                Clear
+              </Button>
+              <Button onClick={handleSubmit} disabled={submitting}>
+                {submitting
+                  ? "Saving..."
+                  : mode === "create"
+                    ? "Create Rep Bin"
+                    : "Save Changes"}
+              </Button>
+            </div>
+          </DialogHeader>
 
-              <div className="grid gap-4 py-2 md:grid-cols-3">
-                <div className="contents">
-                  <div className="grid gap-2">
-                    <Label htmlFor="item-no">Item No</Label>
-                    <div className="relative">
-                      <Input
-                        id="item-no"
-                        value={form.ITEM_NO}
-                        onChange={(event) => {
-                          setForm((prev) => ({
-                            ...prev,
-                            ITEM_NO: event.target.value,
-                            INVENTORY_ITEM_ID: null,
-                            ORGANIZATION_ID: null,
-                            ORG: "",
-                          }))
-                          setOrganizationOptions([])
-                          setItemOrganization(null)
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault()
-                            event.stopPropagation()
-                          }
-                        }}
-                        onFocus={() => {
-                          if (!form.INVENTORY_ITEM_ID) setShowItemOptions(true)
-                        }}
-                        placeholder="Search item by code"
-                        disabled={mode === "edit" || itemSearchLoading}
-                      />
-                      {itemSearchLoading ? (
-                        <div className="absolute inset-y-0 right-2 flex items-center text-slate-400">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        </div>
-                      ) : null}
-                      {showItemOptions && itemSearchResults.length > 0 ? (
-                        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-                          {itemSearchResults.map((item) => (
-                            <button
-                              key={`${item.InventoryItemId}-${item.OrganizationId}`}
-                              type="button"
-                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => {
-                                const selectedOrganization = item.OrganizationId
-                                  ? {
-                                    OrganizationId: item.OrganizationId,
-                                    Organization: item.Organization,
-                                  }
-                                  : null
-                                setOrganizationOptions(
-                                  selectedOrganization ? [selectedOrganization] : []
-                                )
-                                setItemOrganization(selectedOrganization)
-                                setForm((prev) => ({
-                                  ...prev,
-                                  ITEM_NO: item.ItemName,
-                                  DESCRIPTION: item.Description,
-                                  ORG: item.Organization,
-                                  ORGANIZATION_ID: item.OrganizationId,
-                                  INVENTORY_ITEM_ID: item.InventoryItemId,
-                                  BIN_LOCATION:
-                                    getLocationForOrganization(
-                                      selectedOrganization
-                                    ) || prev.BIN_LOCATION,
-                                }))
-                                setItemSearchResults([])
-                                setShowItemOptions(false)
-                              }}
-                            >
-                              <span className="flex-1">
-                                <span className="block font-medium text-slate-800">
-                                  {item.ItemName}
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  {item.Description}
-                                </span>
-                              </span>
-                              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                {item.Organization}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="organization">Organization</Label>
-                    <select
-                      id="organization"
-                      value={form.ORGANIZATION_ID ?? ""}
-                      onChange={(event) => {
-                        const organizationId = Number(event.target.value)
-                        const selectedOrg = organizationOptions.find(
-                          (option) => option.OrganizationId === organizationId
-                        )
-                        setForm((prev) => ({
-                          ...prev,
-                          ORG: selectedOrg?.Organization ?? "",
-                          ORGANIZATION_ID: selectedOrg?.OrganizationId ?? null,
-                        }))
-                      }}
-                      className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none"
-                      disabled={mode === "edit" || !organizationOptions.length}
-                    >
-                      <option value="">
-                        {organizationOptions.length ? "Select organization" : ""}
-                      </option>
-                      {organizationOptions.map((option) => (
-                        <option
-                          key={option.OrganizationId}
-                          value={option.OrganizationId}
-                        >
-                          {option.Organization}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="bin-location">Bin Location</Label>
-                    <select
-                      id="bin-location"
-                      value={form.BIN_LOCATION || ""}
-                      onChange={(event) => {
-                        const location = event.target.value
-                        const locationOrganizations =
-                          fixedLocationOrganizations[location]
-                        const selectedOrganization = locationOrganizations
-                          ? locationOrganizations.length === 1
-                            ? locationOrganizations[0]
-                            : (locationOrganizations.find(
-                              (organization) =>
-                                organization.OrganizationId ===
-                                itemOrganization?.OrganizationId
-                            ) ?? null)
-                          : null
-
-                        setOrganizationOptions(locationOrganizations ?? [])
-                        setForm((prev) => ({
-                          ...prev,
-                          BIN_LOCATION: location,
-                          ORGANIZATION_ID:
-                            selectedOrganization?.OrganizationId ?? null,
-                          ORG: selectedOrganization?.Organization ?? "",
-                        }))
-                      }}
-                      className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none"
-                    >
-                      <option value="">Select location</option>
-                      {binOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid gap-2 md:col-span-3">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={form.DESCRIPTION}
-                    onChange={(event) =>
+          <div className="grid gap-4 py-2 md:grid-cols-3">
+            <div className="contents">
+              <div className="grid gap-2">
+                <Label htmlFor="item-no">Item No</Label>
+                <div className="relative">
+                  <Input
+                    id="item-no"
+                    value={form.ITEM_NO}
+                    onChange={(event) => {
                       setForm((prev) => ({
                         ...prev,
-                        DESCRIPTION: event.target.value,
+                        ITEM_NO: event.target.value,
+                        INVENTORY_ITEM_ID: null,
+                        ORGANIZATION_ID: null,
+                        ORG: "",
                       }))
-                    }
-                    placeholder="Enter item description"
-                    disabled
+                      setOrganizationOptions([])
+                      setItemOrganization(null)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        event.stopPropagation()
+                      }
+                    }}
+                    onFocus={() => {
+                      if (!form.INVENTORY_ITEM_ID) setShowItemOptions(true)
+                    }}
+                    placeholder="Search item by code"
+                    disabled={mode === "edit" || itemSearchLoading}
                   />
+                  {itemSearchLoading ? (
+                    <div className="absolute inset-y-0 right-2 flex items-center text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : null}
+                  {showItemOptions && itemSearchResults.length > 0 ? (
+                    <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                      {itemSearchResults.map((item) => (
+                        <Button
+                          key={`${item.InventoryItemId}-${item.OrganizationId}`}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            const selectedOrganization = item.OrganizationId
+                              ? {
+                                OrganizationId: item.OrganizationId,
+                                Organization: item.Organization,
+                              }
+                              : null
+                            setOrganizationOptions(
+                              selectedOrganization ? [selectedOrganization] : []
+                            )
+                            setItemOrganization(selectedOrganization)
+                            setForm((prev) => ({
+                              ...prev,
+                              ITEM_NO: item.ItemName,
+                              DESCRIPTION: item.Description,
+                              ORG: item.Organization,
+                              ORGANIZATION_ID: item.OrganizationId,
+                              INVENTORY_ITEM_ID: item.InventoryItemId,
+                              BIN_LOCATION:
+                                getLocationForOrganization(
+                                  selectedOrganization
+                                ) || prev.BIN_LOCATION,
+                            }))
+                            setItemSearchResults([])
+                            setShowItemOptions(false)
+                          }}
+                        >
+                          <span className="flex-1">
+                            <span className="block font-medium text-slate-800">
+                              {item.ItemName}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {item.Description}
+                            </span>
+                          </span>
+                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            {item.Organization}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
+              </div>
 
-                {/* <div className="grid gap-2">
+              <div className="grid gap-2">
+                <Label htmlFor="organization">Organization</Label>
+                <NativeSelect
+                  id="organization"
+                  value={form.ORGANIZATION_ID ?? ""}
+                  onChange={(event) => {
+                    const organizationId = Number(event.target.value)
+                    const selectedOrg = organizationOptions.find(
+                      (option) => option.OrganizationId === organizationId
+                    )
+                    setForm((prev) => ({
+                      ...prev,
+                      ORG: selectedOrg?.Organization ?? "",
+                      ORGANIZATION_ID: selectedOrg?.OrganizationId ?? null,
+                    }))
+                  }}
+                  className="w-full"
+                  disabled={mode === "edit" || !organizationOptions.length}
+                >
+                  <NativeSelectOption value="">
+                    {organizationOptions.length ? "Select organization" : ""}
+                  </NativeSelectOption>
+                  {organizationOptions.map((option) => (
+                    <NativeSelectOption
+                      key={option.OrganizationId}
+                      value={option.OrganizationId}
+                    >
+                      {option.Organization}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="bin-location">Bin Location</Label>
+                <NativeSelect
+                  id="bin-location"
+                  value={form.BIN_LOCATION || ""}
+                  onChange={(event) => {
+                    const location = event.target.value
+                    const locationOrganizations =
+                      fixedLocationOrganizations[location]
+                    const selectedOrganization = locationOrganizations
+                      ? locationOrganizations.length === 1
+                        ? locationOrganizations[0]
+                        : (locationOrganizations.find(
+                          (organization) =>
+                            organization.OrganizationId ===
+                            itemOrganization?.OrganizationId
+                        ) ?? null)
+                      : null
+
+                    setOrganizationOptions(locationOrganizations ?? [])
+                    setForm((prev) => ({
+                      ...prev,
+                      BIN_LOCATION: location,
+                      ORGANIZATION_ID:
+                        selectedOrganization?.OrganizationId ?? null,
+                      ORG: selectedOrganization?.Organization ?? "",
+                    }))
+                  }}
+                  className="w-full"
+                >
+                  <NativeSelectOption value="">Select location</NativeSelectOption>
+                  {binOptions.map((option) => (
+                    <NativeSelectOption key={option} value={option}>
+                      {option}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:col-span-3">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={form.DESCRIPTION}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    DESCRIPTION: event.target.value,
+                  }))
+                }
+                placeholder="Enter item description"
+                disabled
+              />
+            </div>
+
+            {/* <div className="grid gap-2">
               <Label htmlFor="bin-location">Bin Location</Label>
               <select
                 id="bin-location"
@@ -1029,351 +1123,343 @@ export const DashboardPage = () => {
               </select>
             </div> */}
 
-                <div className="grid gap-2">
-                  <Label htmlFor="customer-name">Customer Name</Label>
-                  <div className="relative">
-                    <Input
-                      id="customer-name"
-                      value={form.CUSTOMER_NAME}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          CUSTOMER_NAME: event.target.value,
-                          CUSTOMER_ID: null,
-                          CUSTOMER_CATEGORY: "",
-                          BIN_CATEGORY: "",
-                        }))
-                      }
-                      onFocus={() => setShowCustomerOptions(true)}
-                      onBlur={() =>
-                        window.setTimeout(() => setShowCustomerOptions(false), 120)
-                      }
-                      placeholder="Search customer name"
-                      disabled={mode === "edit"}
-                    />
-                    {customerSearchLoading ? (
-                      <div className="absolute inset-y-0 right-2 flex items-center text-slate-400">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      </div>
-                    ) : null}
-                    {showCustomerOptions && filteredCustomers.length > 0 ? (
-                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-                        {filteredCustomers.map((customer) => (
-                          <button
-                            key={customer.CUSTOMER_ID}
-                            type="button"
-                            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-100"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setForm((prev) => ({
-                                ...prev,
-                                CUSTOMER_NAME: customer.CUSTOMER_NAME,
-                                CUSTOMER_ID: customer.CUSTOMER_ID,
-                                REGION: customer.REGION?.trim() || prev.REGION,
-                                CUSTOMER_CATEGORY: customer.CUSTOMER_CATEGORY ?? "",
-                                BIN_CATEGORY:
-                                  customer.CUSTOMER_CLASS_CODE?.toUpperCase() ===
-                                    "DEALER"
-                                    ? "B4"
-                                    : "B1",
-                              }))
-                              setShowCustomerOptions(false)
-                            }}
-                          >
-                            <span className="font-medium text-slate-800">
-                              {customer.CUSTOMER_NAME}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                    {showCustomerOptions &&
-                      !customerSearchLoading &&
-                      !filteredCustomers.length &&
-                      form.CUSTOMER_NAME.trim() ? (
-                      <div className="absolute z-20 mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-lg">
-                        No customer found for this search.
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="contents">
-                  <div className="grid gap-2">
-                    <Label htmlFor="region">Region</Label>
-                    <select
-                      id="region"
-                      value={form.REGION}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, REGION: event.target.value }))
-                      }
-                      className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none"
-                      disabled={mode === "edit"}
-                    >
-                      <option value="">
-                        {regionOptions.length
-                          ? "Select region"
-                          : "No regions available"}
-                      </option>
-                      {regionOptions.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                    {/* {form.CUSTOMER_NAME && (
-                  <div>
-                    <span className="text-xs text-slate-500">
-                      Customer category: {customerOptions.find((customer) => customer.CUSTOMER_ID === form.CUSTOMER_ID)?.CUSTOMER_CATEGORY ?? "Not available"}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      Customer class code: {customerOptions.find((customer) => customer.CUSTOMER_ID === form.CUSTOMER_ID)?.CUSTOMER_CLASS_CODE ?? "Not available"}
-                    </span>
-                  </div>
-                )} */}
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="bin-category">Bin Category</Label>
-                    <select
-                      id="bin-category"
-                      value={form.BIN_CATEGORY}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          BIN_CATEGORY: event.target.value,
-                        }))
-                      }
-                      className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none"
-                      disabled
-                    >
-                      <option value="">Select Bin Category</option>
-                      <option value="B1">B1</option>
-                      <option value="B4">B4</option>
-                    </select>
-                  </div>
-                </div>
-
-                {form.CUSTOMER_ID ? (
-                  <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">
-                          Customer sales trend {trendYears ? `(${trendYears})` : ""}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Last 12 months for {form.CUSTOMER_NAME}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[11px] tracking-wide text-slate-500 uppercase">
-                          Average
-                        </p>
-                        <p className="text-lg font-semibold text-blue-700">
-                          {monthlySalesLoading ? "..." : ahoAverage}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="h-28 w-full">
-                      {monthlySalesLoading ? (
-                        <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                          Loading monthly sales...
-                        </div>
-                      ) : monthlySales.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart
-                            data={monthlySales.map((entry) => ({
-                              month: formatTrendMonth(entry.MONTH),
-                              sales: Number.isFinite(Number(entry.SALES))
-                                ? Number(entry.SALES)
-                                : 0,
-                            }))}
-                            margin={{ top: 4, right: 8, left: -24, bottom: 0 }}
-                          >
-                            <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                            <XAxis
-                              dataKey="month"
-                              tick={{ fontSize: 10 }}
-                              tickLine={false}
-                            />
-                            <YAxis
-                              tick={{ fontSize: 10 }}
-                              tickLine={false}
-                              axisLine={false}
-                            />
-                            <Tooltip />
-                            <Line
-                              type="monotone"
-                              dataKey="sales"
-                              name="Sales"
-                              stroke="#2563eb"
-                              strokeWidth={2}
-                              dot={{ r: 2, fill: "#2563eb" }}
-                            >
-                              <LabelList
-                                dataKey="sales"
-                                position="top"
-                                offset={6}
-                                fill="#334155"
-                                fontSize={10}
-                              />
-                            </Line>
-                          </LineChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                          No monthly sales found.
-                        </div>
-                      )}
-                    </div>
+            <div className="grid gap-2">
+              <Label htmlFor="customer-name">Customer Name</Label>
+              <div className="relative">
+                <Input
+                  id="customer-name"
+                  value={form.CUSTOMER_NAME}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      CUSTOMER_NAME: event.target.value,
+                      CUSTOMER_ID: null,
+                      CUSTOMER_CATEGORY: "",
+                      BIN_CATEGORY: "",
+                    }))
+                  }
+                  onFocus={() => setShowCustomerOptions(true)}
+                  onBlur={() =>
+                    window.setTimeout(() => setShowCustomerOptions(false), 120)
+                  }
+                  placeholder="Search customer name"
+                  disabled={mode === "edit"}
+                />
+                {customerSearchLoading ? (
+                  <div className="absolute inset-y-0 right-2 flex items-center text-slate-400">
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   </div>
                 ) : null}
+                {showCustomerOptions && filteredCustomers.length > 0 ? (
+                  <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                    {filteredCustomers.map((customer) => (
+                      <Button
+                        key={customer.CUSTOMER_ID}
+                        type="button"
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-100"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            CUSTOMER_NAME: customer.CUSTOMER_NAME,
+                            CUSTOMER_ID: customer.CUSTOMER_ID,
+                            REGION: customer.REGION?.trim() || prev.REGION,
+                            CUSTOMER_CATEGORY: customer.CUSTOMER_CATEGORY ?? "",
+                            BIN_CATEGORY:
+                              customer.CUSTOMER_CLASS_CODE?.toUpperCase() ===
+                                "DEALER"
+                                ? "B4"
+                                : "B1",
+                          }))
+                          setShowCustomerOptions(false)
+                        }}
+                      >
+                        <span className="font-medium text-slate-800">
+                          {customer.CUSTOMER_NAME}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+                {showCustomerOptions &&
+                  !customerSearchLoading &&
+                  !filteredCustomers.length &&
+                  form.CUSTOMER_NAME.trim() ? (
+                  <div className="absolute z-20 mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-lg">
+                    No customer found for this search.
+                  </div>
+                ) : null}
+              </div>
+            </div>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="roq">Bin Qty</Label>
-                  <Input
-                    id="roq"
-                    type="number"
-                    value={form.ROQ === 0 ? "" : form.ROQ}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        ROQ: Number(event.target.value),
-                      }))
-                    }
-                  />
+            <div className="contents">
+              <div className="grid gap-2">
+                <Label htmlFor="region">Region</Label>
+                <NativeSelect
+                  id="region"
+                  value={form.REGION}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, REGION: event.target.value }))
+                  }
+                  className="w-full"
+                  disabled={mode === "edit"}
+                >
+                  <NativeSelectOption value="">
+                    {regionOptions.length
+                      ? "Select region"
+                      : "No regions available"}
+                  </NativeSelectOption>
+                  {regionOptions.map((r) => (
+                    <NativeSelectOption key={r} value={r}>
+                      {r}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="bin-category">Bin Category</Label>
+                <NativeSelect
+                  id="bin-category"
+                  value={form.BIN_CATEGORY}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      BIN_CATEGORY: event.target.value,
+                    }))
+                  }
+                  className="w-full"
+                  disabled
+                >
+                  <NativeSelectOption value="">Select Bin Category</NativeSelectOption>
+                  <NativeSelectOption value="B1">B1</NativeSelectOption>
+                  <NativeSelectOption value="B4">B4</NativeSelectOption>
+                </NativeSelect>
+              </div>
+            </div>
+
+            {form.CUSTOMER_ID ? (
+              <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Customer sales trend {trendYears ? `(${trendYears})` : ""}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Last 12 months for {form.CUSTOMER_NAME}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[11px] tracking-wide text-slate-500 uppercase">
+                      Average
+                    </p>
+                    <p className="text-lg font-semibold text-blue-700">
+                      {monthlySalesLoading ? "..." : ahoAverage}
+                    </p>
+                  </div>
                 </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="roq">Stock Type</Label>
-                  <select
-                    id="stock-type"
-                    value={form.STOCK_TYPE || ""}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        STOCK_TYPE: event.target.value,
-                      }))
-                    }
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none"
-                    disabled={mode === "edit"}
-                  >
-                    <option value="">Select Stock Type</option>
-                    <option value="FG">FG</option>
-                    <option value="FC">FC</option>
-                    <option value="RM">RM</option>
-                  </select>
+                <div className="h-28 w-full">
+                  {monthlySalesLoading ? (
+                    <div className="flex h-full items-center justify-center text-xs text-slate-500">
+                      Loading monthly sales...
+                    </div>
+                  ) : monthlySales.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={monthlySales.map((entry) => ({
+                          month: formatTrendMonth(entry.MONTH),
+                          sales: Number.isFinite(Number(entry.SALES))
+                            ? Number(entry.SALES)
+                            : 0,
+                        }))}
+                        margin={{ top: 4, right: 8, left: -24, bottom: 0 }}
+                      >
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fontSize: 10 }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip />
+                        <Line
+                          type="monotone"
+                          dataKey="sales"
+                          name="Sales"
+                          stroke="#2563eb"
+                          strokeWidth={2}
+                          dot={{ r: 2, fill: "#2563eb" }}
+                        >
+                          <LabelList
+                            dataKey="sales"
+                            position="top"
+                            offset={6}
+                            fill="#334155"
+                            fontSize={10}
+                          />
+                        </Line>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-slate-500">
+                      No monthly sales found.
+                    </div>
+                  )}
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
+            ) : null}
 
-          <Dialog
-            open={deleteDialogOpen}
-            onOpenChange={(open) => {
-              if (!deleting) setDeleteDialogOpen(open)
-            }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Delete Bin</DialogTitle>
-                <DialogDescription>
-                  Enter a reason for deleting bin {deleteRow?.REP_ID}.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-2 py-2">
-                <Label htmlFor="delete-reason">Reason</Label>
-                <Input
-                  id="delete-reason"
-                  value={deleteReason}
-                  onChange={(event) => setDeleteReason(event.target.value)}
-                  placeholder="Enter delete reason"
-                  autoFocus
-                  disabled={deleting}
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setDeleteDialogOpen(false)}
-                  disabled={deleting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => void handleConfirmDelete()}
-                  disabled={deleting || !deleteReason.trim()}
-                >
-                  {deleting ? "Deleting..." : "Delete"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            <div className="grid gap-2">
+              <Label htmlFor="roq">Bin Qty</Label>
+              <Input
+                id="roq"
+                type="number"
+                value={form.ROQ === 0 ? "" : form.ROQ}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    ROQ: Number(event.target.value),
+                  }))
+                }
+              />
+            </div>
 
-          <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
-            <DialogContent className="overflow-hidden border-slate-200 shadow-xl sm:max-w-180">
-              <DialogHeader className="space-y-2">
-                <DialogTitle className="flex items-center gap-2 text-xl font-bold text-amber-700">
-                  Active Master Bin Already Exists
-                </DialogTitle>
-                <DialogDescription className="leading-normal text-slate-600">
-                  A bin already exists matching this configuration.
-                </DialogDescription>
-              </DialogHeader>
+            <div className="grid gap-2">
+              <Label htmlFor="stock-type">Stock Type</Label>
+              <NativeSelect
+                id="stock-type"
+                value={form.STOCK_TYPE || ""}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    STOCK_TYPE: event.target.value,
+                  }))
+                }
+                className="w-full"
+                disabled={mode === "edit"}
+              >
+                <NativeSelectOption value="">Select Stock Type</NativeSelectOption>
+                <NativeSelectOption value="FG">FG</NativeSelectOption>
+                <NativeSelectOption value="FC">FC</NativeSelectOption>
+                <NativeSelectOption value="RM">RM</NativeSelectOption>
+              </NativeSelect>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-              {/* Metadata Details Card */}
-              <div className="my-2 rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-                <div className="mb-3 text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                  Existing Bin Configuration
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Item No:</span>{" "}
-                    {duplicatePayload?.ITEM_NO}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Customer:</span>{" "}
-                    {duplicatePayload?.CUSTOMER_NAME}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Region:</span>{" "}
-                    {duplicatePayload?.REGION}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Org:</span>{" "}
-                    {duplicatePayload?.ORG}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Stock Type:</span>{" "}
-                    {duplicatePayload?.STOCK_TYPE}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Category:</span>{" "}
-                    {duplicatePayload?.BIN_CATEGORY}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Location:</span>{" "}
-                    {duplicatePayload?.BIN_LOCATION || "N/A"}
-                  </p>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">Bin Qty:</span>{" "}
-                    {duplicatePayload?.ROQ}
-                  </p>
-                </div>
-              </div>
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!deleting) setDeleteDialogOpen(open)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Bin</DialogTitle>
+            <DialogDescription>
+              {isBulkDelete
+                ? `Enter a reason for deleting the selected ${binGridApi?.getSelectedRows()?.length || 0} bin(s).`
+                : `Enter a reason for deleting bin ${deleteRow?.REP_ID}.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="delete-reason">Reason</Label>
+            <Input
+              id="delete-reason"
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              placeholder="Enter delete reason"
+              autoFocus
+              disabled={deleting}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleConfirmDelete()}
+              disabled={deleting || !deleteReason.trim()}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-              <DialogFooter className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-                <Button
-                  variant="outline"
-                  className="min-w-20 border-slate-200 bg-emerald-300 text-slate-700 hover:bg-destructive"
-                  onClick={() => setDuplicateDialogOpen(false)}
-                  disabled={submitting}
-                >
-                  Ok
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+      <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+        <DialogContent className="overflow-hidden border-slate-200 shadow-xl sm:max-w-180">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-amber-700">
+              Active Master Bin Already Exists
+            </DialogTitle>
+            <DialogDescription className="leading-normal text-slate-600">
+              A bin already exists matching this configuration.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Metadata Details Card */}
+          <div className="my-2 rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+            <div className="mb-3 text-xs font-semibold tracking-wider text-slate-500 uppercase">
+              Existing Bin Configuration
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Item No:</span>{" "}
+                {duplicatePayload?.ITEM_NO}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Customer:</span>{" "}
+                {duplicatePayload?.CUSTOMER_NAME}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Region:</span>{" "}
+                {duplicatePayload?.REGION}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Org:</span>{" "}
+                {duplicatePayload?.ORG}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Stock Type:</span>{" "}
+                {duplicatePayload?.STOCK_TYPE}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Category:</span>{" "}
+                {duplicatePayload?.BIN_CATEGORY}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Location:</span>{" "}
+                {duplicatePayload?.BIN_LOCATION || "N/A"}
+              </p>
+              <p className="text-slate-600">
+                <span className="font-medium text-slate-900">Bin Qty:</span>{" "}
+                {duplicatePayload?.ROQ}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button
+              variant="outline"
+              className="min-w-20 border-slate-200 bg-emerald-300 text-slate-700 hover:bg-destructive"
+              onClick={() => setDuplicateDialogOpen(false)}
+              disabled={submitting}
+            >
+              Ok
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
