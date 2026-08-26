@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { useAuth } from "@/context/AuthContext"
 import { useSalesPlanDashboard } from "@/hooks/useSalesPlanDashboard"
@@ -20,13 +20,14 @@ import {
   ArrowLeft,
   Eye,
   Edit2,
-  LineChart,
   Loader2
 } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Label, LabelList, Line } from "recharts"
+import { BarChart, LineChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList, Line } from "recharts"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import type { Button, Input } from "@base-ui/react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 export const DashboardPage = () => {
   const { currentRegion, currentUserRole, currentUser } = useAuth()
@@ -84,6 +85,69 @@ export const DashboardPage = () => {
     binCat: "",
     stockType: "FG",
     binLocation: ""
+  })
+
+  // Dialog States and Helpers
+  const [mode, setMode] = useState<"create" | "edit">("create")
+  const [selectedRow, setSelectedRow] = useState<any>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [itemSearchLoading, setItemSearchLoading] = useState(false)
+  const [showItemOptions, setShowItemOptions] = useState(false)
+  const [itemSearchResults, setItemSearchResults] = useState<any[]>([])
+  const [organizationOptions, setOrganizationOptions] = useState<any[]>([])
+  const [itemOrganization, setItemOrganization] = useState<any>(null)
+  const [showCustomerOptions, setShowCustomerOptions] = useState(false)
+  const customerSearchLoading = false
+  const [trendYears, setTrendYears] = useState("")
+  const [monthlySales, setMonthlySales] = useState<any[]>([])
+  const [monthlySalesLoading, setMonthlySalesLoading] = useState(false)
+  const [ahoAverage, setAhoAverage] = useState<number | string>(0)
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteRow, setDeleteRow] = useState<any>(null)
+  const [deleteReason, setDeleteReason] = useState("")
+
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [duplicatePayload, setDuplicatePayload] = useState<any>(null)
+
+  const regionOptions = ["SOUTH", "NORTH", "EAST", "WEST", "HO"]
+  const binOptions = ["CHENNAI WH", "DELHI WH", "KOLKATA WH", "MUMBAI WH"]
+  const fixedLocationOrganizations: Record<string, any[]> = {
+    "CHENNAI WH": [{ OrganizationId: 81, Organization: "MDU" }],
+    "DELHI WH": [{ OrganizationId: 82, Organization: "DEL" }],
+    "KOLKATA WH": [{ OrganizationId: 83, Organization: "CAL" }],
+    "MUMBAI WH": [{ OrganizationId: 84, Organization: "BOM" }]
+  }
+
+  const getLocationForOrganization = (org: any) => {
+    if (!org) return ""
+    if (org.Organization === "MDU") return "CHENNAI WH"
+    if (org.Organization === "DEL") return "DELHI WH"
+    if (org.Organization === "CAL") return "KOLKATA WH"
+    if (org.Organization === "BOM") return "MUMBAI WH"
+    return ""
+  }
+
+  const formatTrendMonth = (mon: string) => {
+    if (!mon) return ""
+    return mon
+  }
+
+  const [form, setForm] = useState({
+    REP_ID: 0,
+    ITEM_NO: "",
+    DESCRIPTION: "",
+    ORG: "",
+    ORGANIZATION_ID: null as number | null,
+    INVENTORY_ITEM_ID: null as number | null,
+    BIN_LOCATION: "",
+    CUSTOMER_NAME: "",
+    CUSTOMER_ID: null as number | null,
+    REGION: "",
+    BIN_CATEGORY: "",
+    ROQ: 0,
+    STOCK_TYPE: "FG",
   })
 
   // Resolve Portal element target
@@ -147,6 +211,178 @@ export const DashboardPage = () => {
       setMonthlySalesData([])
     }
   }, [binForm.customerId, binForm.inventoryItemId, binForm.organizationId, fetchMonthlyChart])
+
+  // Item Autocomplete search for dialog form
+  useEffect(() => {
+    if (form.ITEM_NO && !form.INVENTORY_ITEM_ID && form.ITEM_NO.trim().length >= 2) {
+      setItemSearchLoading(true)
+      salesPlanApi.getInventoryItemDetails(form.ITEM_NO)
+        .then((res: any) => {
+          const items = res.data || []
+          setItemSearchResults(items.map((it: any) => ({
+            ItemName: it.ITEM_NO,
+            Description: it.DESCRIPTION,
+            Organization: it.ORG || "",
+            OrganizationId: it.ORGANIZATION_ID || null,
+            InventoryItemId: it.INVENTORY_ITEM_ID
+          })))
+        })
+        .catch((err) => console.error("Error searching items:", err))
+        .finally(() => setItemSearchLoading(false))
+    } else {
+      setItemSearchResults([])
+    }
+  }, [form.ITEM_NO, form.INVENTORY_ITEM_ID])
+
+  // Filtered customers for customer autocomplete in dialog form
+  const filteredCustomers = useMemo(() => {
+    if (!form.CUSTOMER_NAME) return s.customerList
+    const query = form.CUSTOMER_NAME.toLowerCase()
+    return s.customerList.filter((c: any) =>
+      c.CUSTOMER_NAME.toLowerCase().includes(query)
+    )
+  }, [form.CUSTOMER_NAME, s.customerList])
+
+  // Load monthly trend history statistics chart inside Create/Edit Dialog modal
+  useEffect(() => {
+    if (form.CUSTOMER_ID && form.INVENTORY_ITEM_ID && form.ORGANIZATION_ID) {
+      setMonthlySalesLoading(true)
+      salesPlanApi.getMonthlyQuantity(
+        form.CUSTOMER_ID,
+        form.ORGANIZATION_ID,
+        form.INVENTORY_ITEM_ID
+      )
+      .then((res: any) => {
+        const salesData = res.data || []
+        setMonthlySales(salesData)
+        if (salesData.length > 0) {
+          const total = salesData.reduce((sum: number, entry: any) => sum + (Number(entry.SALES) || 0), 0)
+          const avg = (total / salesData.length).toFixed(1)
+          setAhoAverage(avg)
+          const firstMonth = salesData[0]?.MONTH || ""
+          const lastMonth = salesData[salesData.length - 1]?.MONTH || ""
+          setTrendYears(`${firstMonth} - ${lastMonth}`)
+        } else {
+          setAhoAverage(0)
+          setTrendYears("")
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load monthly sales trend:", err)
+        setMonthlySales([])
+        setAhoAverage(0)
+        setTrendYears("")
+      })
+      .finally(() => setMonthlySalesLoading(false))
+    } else {
+      setMonthlySales([])
+      setAhoAverage(0)
+      setTrendYears("")
+    }
+  }, [form.CUSTOMER_ID, form.INVENTORY_ITEM_ID, form.ORGANIZATION_ID])
+
+  const handleClearForm = () => {
+    setForm({
+      REP_ID: 0,
+      ITEM_NO: "",
+      DESCRIPTION: "",
+      ORG: "",
+      ORGANIZATION_ID: null,
+      INVENTORY_ITEM_ID: null,
+      BIN_LOCATION: "",
+      CUSTOMER_NAME: "",
+      CUSTOMER_ID: null,
+      REGION: "",
+      BIN_CATEGORY: "",
+      ROQ: 0,
+      STOCK_TYPE: "FG",
+    })
+    setOrganizationOptions([])
+    setItemOrganization(null)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    if (e && e.preventDefault) e.preventDefault()
+    if (!form.INVENTORY_ITEM_ID || !form.ORGANIZATION_ID || !form.CUSTOMER_ID) {
+      toast.error("Please fill in all required fields.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      if (mode === "create") {
+        const payload = {
+          customerId: form.CUSTOMER_ID,
+          custName: form.CUSTOMER_NAME,
+          organizationId: form.ORGANIZATION_ID,
+          org: form.ORG,
+          inventoryItemId: form.INVENTORY_ITEM_ID,
+          itemNo: form.ITEM_NO,
+          description: form.DESCRIPTION,
+          tbrQty: form.ROQ,
+          binCat: form.BIN_CATEGORY,
+          stockType: form.STOCK_TYPE,
+          binLocation: form.BIN_LOCATION,
+          region: form.REGION || s.subRegionStr || s.activeRegion,
+        }
+
+        try {
+          await salesPlanApi.createBinRecord(payload as any, currentUser?.username)
+          toast.success("Replenishment bin created successfully.")
+          setIsModalOpen(false)
+          handleClearForm()
+          s.loadRepBinData()
+        } catch (err: any) {
+          if (err.response?.status === 409 || err.response?.data?.message?.includes("already exists")) {
+            setDuplicatePayload(form)
+            setDuplicateDialogOpen(true)
+          } else {
+            throw err
+          }
+        }
+      } else {
+        // Edit mode (updating ROQ)
+        await s.updateRepBinRecord({
+          REP_ID: form.REP_ID,
+          ROQ: form.ROQ
+        } as any)
+        toast.success("Replenishment bin updated.")
+        setIsModalOpen(false)
+        handleClearForm()
+        s.loadRepBinData()
+      }
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.response?.data?.message || "Failed to submit bin record.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteRow) return
+    setDeleting(true)
+    try {
+      await salesPlanApi.deleteBinMasterData({
+        REP_ID: deleteRow.REP_ID,
+        reason: deleteReason
+      })
+      toast.success("Replenishment bin deleted successfully.")
+      setDeleteDialogOpen(false)
+      setDeleteRow(null)
+      setDeleteReason("")
+      if (showPendingBins) {
+        s.loadPendingRepBinData()
+      } else {
+        s.loadRepBinData()
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error("Failed to delete replenishment bin.")
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleItemSelect = async (item: any) => {
     setSelectedItem(item)
@@ -223,16 +459,6 @@ export const DashboardPage = () => {
     }
   }
 
-  // Action: Update Replenishment Bin master Row Qty
-  const handleUpdateBinQty = async (row: any) => {
-    try {
-      await s.updateRepBinRecord(row)
-      toast.success("Replenishment quantity updated.")
-    } catch (err) {
-      toast.error("Failed to update replenishment quantity.")
-    }
-  }
-
   // Handle Search submit: queries data and changes subview to DETAILS
   const handleQuerySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -267,28 +493,6 @@ export const DashboardPage = () => {
       await s.loadPendingRepBinData()
     } catch (err) {
       toast.error("Failed to approve replenishment bin.")
-    }
-  }
-
-  // Action: Reject/Delete Replenishment Bin
-  const handleDeleteBinMaster = async (row: any) => {
-    const reason = window.prompt("Please enter a reason for deletion:")
-    if (reason === null) return
-    if (!reason.trim()) {
-      toast.error("A reason is required to delete.")
-      return
-    }
-
-    try {
-      await salesPlanApi.deleteBinMasterData({ REP_ID: row.REP_ID, reason })
-      toast.success("Replenishment bin deleted.")
-      if (showPendingBins) {
-        await s.loadPendingRepBinData()
-      } else {
-        await s.loadRepBinData()
-      }
-    } catch (err) {
-      toast.error("Failed to delete replenishment bin.")
     }
   }
 
@@ -567,7 +771,11 @@ export const DashboardPage = () => {
                   {showPendingBins ? "Show Active Bins" : "Show Pending Bins"}
                 </button>
                 <button
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => {
+                    setMode("create")
+                    handleClearForm()
+                    setIsModalOpen(true)
+                  }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -598,7 +806,30 @@ export const DashboardPage = () => {
                             </button>
                           ) : (
                             <button
-                              onClick={() => handleUpdateBinQty(params.data)}
+                              onClick={() => {
+                                setMode("edit")
+                                setSelectedRow(params.data)
+                                setForm({
+                                  REP_ID: params.data.REP_ID,
+                                  ITEM_NO: params.data.ITEM_NO || "",
+                                  DESCRIPTION: params.data.DESCRIPTION || "",
+                                  ORG: params.data.ORG || "",
+                                  ORGANIZATION_ID: params.data.ORGANIZATION_ID || null,
+                                  INVENTORY_ITEM_ID: params.data.INVENTORY_ITEM_ID || null,
+                                  BIN_LOCATION: params.data.BIN_LOCATION || "",
+                                  CUSTOMER_NAME: params.data.CUSTOMER_NAME || "",
+                                  CUSTOMER_ID: params.data.CUSTOMER_ID || null,
+                                  REGION: params.data.REGION || "",
+                                  BIN_CATEGORY: params.data.BIN_CATEGORY || "",
+                                  ROQ: params.data.ROQ || 0,
+                                  STOCK_TYPE: params.data.STOCK_TYPE || "FG"
+                                })
+                                if (params.data.ORGANIZATION_ID) {
+                                  setOrganizationOptions([{ OrganizationId: params.data.ORGANIZATION_ID, Organization: params.data.ORG }])
+                                  setItemOrganization({ OrganizationId: params.data.ORGANIZATION_ID, Organization: params.data.ORG })
+                                }
+                                setIsModalOpen(true)
+                              }}
                               title="Update Qty"
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                             >
@@ -606,7 +837,11 @@ export const DashboardPage = () => {
                             </button>
                           )}
                           <button
-                            onClick={() => handleDeleteBinMaster(params.data)}
+                            onClick={() => {
+                              setDeleteRow(params.data)
+                              setDeleteReason("")
+                              setDeleteDialogOpen(true)
+                            }}
                             title="Delete Master Bin"
                             className="p-1 text-red-600 hover:bg-red-50 rounded"
                           >

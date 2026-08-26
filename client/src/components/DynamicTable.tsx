@@ -4,7 +4,6 @@ import {
   ModuleRegistry,
   createGrid,
   themeBalham,
-  themeQuartz,
 } from "ag-grid-community"
 import { Loader } from "./Loader"
 
