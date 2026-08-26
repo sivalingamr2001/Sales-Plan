@@ -1,9 +1,12 @@
-function App() {
+import React from "react"
+import { Router } from "./router/Router"
+
+export function App() {
   return (
-    <div className="App">
-      <DynamicTable />
-    </div>
-  );
+    <React.Fragment>
+      <Router />
+    </React.Fragment>
+  )
 }
 
-export default App;
+export default App
