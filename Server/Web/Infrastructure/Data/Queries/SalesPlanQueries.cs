@@ -1,8 +1,22 @@
-﻿namespace Server.Infrastructure.Queries;
+﻿using System;
+using System.Collections.Generic;
 
-public class SalesPlanQueries
+namespace Server.Infrastructure.Queries;
+
+public sealed class SalesPlanQuery(int queryNumber, string description, string queryText)
 {
-    public const string GetSalesPlanByOrdId = @"SELECT
+    public int QueryNumber { get; } = queryNumber;
+
+    public string Description { get; } = description;
+
+    public string QueryText { get; } = queryText;
+}
+
+public static class SalesPlanQueries
+{
+    public static readonly IReadOnlyList<SalesPlanQuery> Queries = new List<SalesPlanQuery>
+    {
+        new SalesPlanQuery(1, "Get Sales Plan By Order Id", @"SELECT
     b.*,
         CASE
             WHEN
@@ -234,9 +248,8 @@ FROM
                         a.ord_ff_dt <= '30-SEP-2026'
             )
     -- Inside your query code string
-    ) b WHERE ORDER_NUMBER = :ordId AND parent_region = :parentRegion";
-
-    public const string GetSalesPlanByCustomerName = @"
+    ) b WHERE ORDER_NUMBER = :ordId AND parent_region = :parentRegion"),
+        new SalesPlanQuery(2, "Get Sales Plan By Customer Name", @"
         SELECT
     b.*,
         CASE
@@ -469,9 +482,8 @@ FROM
                         a.ord_ff_dt <= '30-SEP-2026'
             )
     -- Inside your query code string
-    ) b WHERE SUB_REGION like (:parentRegion) AND bill_to_cust_name = :custName";
-
-    public const string GetSalesPlanConsolidatedTemplate = @"
+    ) b WHERE SUB_REGION like (:parentRegion) AND bill_to_cust_name = :custName"),
+        new SalesPlanQuery(3, "Get Sales Plan Consolidated", @"
        SELECT
         org,
         rrs_cat,
@@ -584,9 +596,8 @@ FROM
         rrs_cat,
         rsv_source,
         order_item,
-        constraint";
-
-    public const string GetSalesPlanBreakdownTemplate = @"
+        constraint"),
+        new SalesPlanQuery(4, "Get Sales Plan Breakdown", @"
     SELECT f.*, CASE WHEN EXCEPTION_QTY <= 0 THEN BRANCH_TARGET_MONTH ELSE '' END as TARGET_MON_FINAL FROM (
         SELECT 
             (SELECT PARENT_REGION FROM JAN_RATING_REGION_MAPPING WHERE REGION = A.SUB_REGION) as PARENT_REGION,
@@ -657,9 +668,8 @@ FROM
           AND A.VALIDATED_FLAG = 'N'
           AND A.SP_WK_FLAG = 'Y'
           AND TRUNC(A.CREATION_DATE) <= TRUNC(SYSDATE)
-    ) F";
-
-    public const string InsertSalesPlanWeekLineSql = @"
+    ) F"),
+        new SalesPlanQuery(5, "Insert Sales Plan Week Line", @"
         INSERT INTO jan_sp_wk_lines (
                 ID, JAN_SP_LINE_ID, sub_region, organization_id, ordered_item, 
                 rrs_cat, ordered_quantity, RSV_SOURCE, ORD_FF_dt, SP_WK_NO, 
@@ -699,9 +709,8 @@ FROM
                 :APP_BY_NAME, 
                 :TARGET_MON_FINAL, 
                 :SET_NAME
-            FROM DUAL";
-
-    public const string InsertBinSpData = @"
+            FROM DUAL"),
+        new SalesPlanQuery(6, "Insert Bin SP Data", @"
         INSERT INTO jan_sp_wk_lines (
                 ID, JAN_SP_LINE_ID, sub_region, organization_id, ordered_item,
                 rrs_cat, ordered_quantity, RSV_SOURCE, ORD_FF_dt, SP_WK_NO,
@@ -721,24 +730,21 @@ FROM
                 :ORD_TYPE, 'Y', 'N', :ASSEMBLY_METHOD2, :PEND_QTY,
                 :ASSEMBLY_METHOD, SYSDATE, :APP_BY_NAME, :TARGET_MON_FINAL,
                 :SET_NAME, :REP_ID
-        FROM DUAL";
-
-    public const string UpdateHOTargetMonthSql = @"
+        FROM DUAL"),
+        new SalesPlanQuery(7, "Update HO Target Month", @"
         UPDATE jan_sp_wk_lines
         SET VALIDATE_DATE = SYSDATE,
             VALIDATED_BY = :REGION,
             VALIDATED_FLAG = 'Y',
             HO_TARGET_MONTH = :HO_TARGET_MONTH
-        WHERE HEADER_ID = :HEADER_ID AND LINE_ID = :LINE_ID";
-
-    public const string UpdateJanSPTargetGuideTab = @"
+        WHERE HEADER_ID = :HEADER_ID AND LINE_ID = :LINE_ID"),
+        new SalesPlanQuery(8, "Update Jan SP Target Guide Tab", @"
         update JAN_SP_TARGET_MONTH_GUIDE_TAB 
         set HO_TARGET_MONTH= :HO_TARGET_MONTH
         WHERE HEADER_ID= :HEADER_ID 
         AND LINE_ID= :LINE_ID
-    ";
-
-    public const string GetBreakupExceptionQtySql = @"
+    "),
+        new SalesPlanQuery(9, "Get Breakup Exception Qty", @"
         SELECT 
             NVL(EXCEPTION_QTY, 0) AS EXCEPTION_QTY,
             NVL(EXCESS_QTY, 0) AS EXCESS_QTY
@@ -746,9 +752,8 @@ FROM
         WHERE ORGANIZATION_ID = JAN_ORGID(:ORG)
           AND INVENTORY_ITEM_ID = :INVENTORY_ITEM_ID
           AND BRANCH_TARGET_MONTH = :SELECTED_MONTH
-          AND LINE_ID = :LINE_ID";
-
-    public const string GetSalesPlanFullBreakdownTemplate = @"
+          AND LINE_ID = :LINE_ID"),
+        new SalesPlanQuery(10, "Get Sales Plan Full Breakdown", @"
         SELECT
         f.*,
             CASE
@@ -1094,42 +1099,21 @@ FROM
                     a.sp_wk_flag = 'Y'
                 AND
                     trunc(a.creation_date) <= trunc(SYSDATE)
-        ) f";
-
-    public const string UpdateBinData = @"
+        ) f"),
+        new SalesPlanQuery(11, "Update Bin Data", @"
         UPDATE jan_sp_wk_bin_t 
         SET branch_TARGET_MONTH = :TargetMonth, 
             branch_validated_date = SYSDATE, 
             emergency_flag = :EmergencyFlag, 
             COMP_PRODUCT_FLAG = :CompProductFlag
-        WHERE BIN_LINE_ID = :BinLineId";
-
-    public const string GetExceptionDetailsByInventoryId = @"
+        WHERE BIN_LINE_ID = :BinLineId"),
+        new SalesPlanQuery(12, "Get Exception Details By Inventory Id", @"
         select MNYR,   JAN_ORGCODE(ORGANIZATION_ID)ORG ,INVENTORY_ITEM_ID, ITEM_NO, DESCRIPTION,AMS_FLAG, SP_QTY, PLAN_CAP_QTY CAPPED_OCQ_QTY
         ,EXCESS_QTY from JAN_SP_AMS1_EXCESS_TAB  where inventory_item_id=:InventoryId 
         union all
         select ''mnyr, JAN_ORGCODE(ORGANIZATION_ID)ORG, INVENTORY_ITEM_ID,ORDERED_ITEM ITEM_NO, DESCRIPTION,AMS_CAT ams_flag,SP_QTY ,CAPPED_OCQ_QTY ,EXCEPTION_QTY  from 
-        JAN_SP_AMS2_EXCESS_TAB  where AMS_CAT='AMS2' AND inventory_item_id=:InventoryId ORDER BY MNYR ASC";
-
-    public static readonly string GetMonthlySalesQtyByParams = @"
-        SELECT 
-            TO_CHAR(TRX_DATE, 'YYYY-MM') AS Month,
-            SUM(QUANTITY_INVOICED) AS Sales
-        FROM 
-            jan_all_ou_sales_t2
-        WHERE
-            ord_empt_status = 'N'
-            AND stk_tfr_flg = 'N'
-            AND inventory_item_id = :InventoryId
-            AND trx_date BETWEEN add_months(trunc(SYSDATE, 'MM'), -12) AND trunc(SYSDATE, 'MM') - 1
-            AND organization_id = :OrgId
-            AND bill_to_customer_id = :CustomerId
-        GROUP BY 
-            TO_CHAR(TRX_DATE, 'YYYY-MM')
-        ORDER BY 
-            Month ASC";
-
-    public const string BinRsvHoPendingList = @"
+        JAN_SP_AMS2_EXCESS_TAB  where AMS_CAT='AMS2' AND inventory_item_id=:InventoryId ORDER BY MNYR ASC"),
+        new SalesPlanQuery(13, "Bin Reservation Ho Pending List", @"
        SELECT  CREATION_DATE, SP_WK_NO, HEADER_ID, JAN_ORGCODE(a.ORGANIZATION_ID) as ORG,
         CUSTOMER_ID, CUSTOMER_NAME, ORDERED_ITEM,ORDERED_QUANTITY,
         RSV_SOURCE, JAN_SALES_RRS_CATEGORY(ORGANIZATION_ID,INVENTORY_item_Id) RRS_CAT, SUB_REGION,
@@ -1144,10 +1128,274 @@ FROM
    
                 a.validated_flag = 'N'
             AND
-                a.sp_wk_flag = 'Y' and rsv_source='BIN_RSV'";
-
-    public const string DeleteBinMasterData = @"
+                a.sp_wk_flag = 'Y' and rsv_source='BIN_RSV'"),
+        new SalesPlanQuery(14, "Delete Bin Master Data", @"
         update jan_customer_replenishment_temp
         set IS_DELETED='Y', DEL_REASON=:reason
-        WHERE REP_ID = :REP_ID";
+        WHERE REP_ID = :REP_ID"),
+        new SalesPlanQuery(15, "Get All Region Details", @"
+            SELECT DISTINCT
+                TER_NAME AS Region, 
+                DR_REGION AS SubRegion 
+            FROM jan_bms_login_v"),
+        new SalesPlanQuery(16, "Get All Bin", @"
+        SELECT
+            customer_id,
+            rep_id,
+            inventory_item_id,
+            organization_id,
+            cust_name,
+            region,
+            parent_region,
+            item_no,
+            SUM(tbr_qty) req_qty,
+            jan_orgcode(organization_id) org,
+            (
+                SELECT DISTINCT description
+                FROM mtl_system_items
+                WHERE inventory_item_id = a.inventory_item_id
+                    AND organization_id = a.organization_id
+            ) description,
+            (
+                SELECT ams_flag
+                FROM jan_item_master_tab
+                WHERE inventory_item_id = a.inventory_item_id
+                    AND organization_id = a.organization_id
+            ) ams_cat,
+            '' target_mon_final,
+            '' ho_target_month,
+            '' prod_commit_month,
+            '' branch_target_month,
+            0 exception_qty,
+            bin_ff_dt,
+            bin_line_id,
+            jan_sales_rrs_category(organization_id, inventory_item_id) rrs_cat,
+            '' branch_validated_date,
+            '' comp_product_flag,
+            '' emergency_flag,
+            '' bin_wk_no
+        FROM
+            jan_sp_wk_bin_t a
+        WHERE
+                1 = 1
+            AND
+                (
+                    (:IsHO = 1 AND branch_validated_date IS NOT NULL)
+                    OR
+                    (:IsHO = 0 AND branch_target_month IS NULL)
+                )
+            {0}
+        GROUP BY
+            customer_id,
+            rep_id,
+            inventory_item_id,
+            organization_id,
+            cust_name,
+            region,
+            parent_region,
+            item_no,
+            bin_ff_dt,
+            bin_line_id"),
+        new SalesPlanQuery(17, "Get Customer Replenishment Bin", @"
+    SELECT A.*,
+        (select customer_class_code from ra_customers where customer_id=a.customer_id)customer_class_code,
+        (select customer_category from jan_pick_forward_control where bill_to_customer_id=a.customer_id)customer_category
+        FROM JAN_CUSTOMER_REPLENISHMENT_T A 
+        WHERE A.END_DATE IS NULL
+      AND (
+        :RegionHoCheck = 'HO' 
+        OR A.REGION IN :Regions
+      )"),
+        new SalesPlanQuery(18, "Get Inventory Item Details", @"
+        SELECT 
+            InventoryItemId,
+            ItemCode,
+            Description
+        FROM (
+            SELECT DISTINCT
+                INVENTORY_ITEM_ID AS InventoryItemId,
+                TRIM(SEGMENT1) AS ItemCode,
+                TRIM(DESCRIPTION) AS Description
+            FROM
+                MTL_SYSTEM_ITEMS
+            WHERE
+                UPPER(SEGMENT1) LIKE '%' || UPPER(:Search) || '%'
+                AND CUSTOMER_ORDER_ENABLED_FLAG = 'Y' 
+                AND organization_id IN (
+                    SELECT organization_id 
+                    FROM org_organization_definitions 
+                    WHERE operating_unit = 103
+                )
+        )
+        ORDER BY 
+            LENGTH(ItemCode) ASC,
+            ItemCode ASC"),
+        new SalesPlanQuery(19, "Get Inventory Item Count", @"
+        SELECT COUNT(DISTINCT INVENTORY_ITEM_ID)
+        FROM
+            MTL_SYSTEM_ITEMS
+        WHERE
+            UPPER(SEGMENT1) LIKE '%' || UPPER(:Search) || '%'
+            AND CUSTOMER_ORDER_ENABLED_FLAG = 'Y'"),
+        new SalesPlanQuery(20, "Get Organization Id By Operating Unit Id And Inventory Id", @"
+        select DISTINCT SHIP_FROM_ORG_ID AS organizationId, JAN_ORGCODE(SHIP_FROM_ORG_ID) AS organizationCode 
+        from jan_oa_bin_demand_rsv_n 
+        where INVENTORY_ITEM_ID = :InventoryId and region=:Region"),
+        new SalesPlanQuery(21, "Insert Replenishment Bin", @"
+        INSERT INTO JAN_CUSTOMER_REPLENISHMENT_TEMP (
+        rep_id,
+        organization_id,
+        org,
+        inventory_item_id,
+        item_no,
+        description,
+        customer_id,
+        CUSTOMER_NAME,
+        roq,
+        start_date,
+        created_by,
+        created_date,
+        last_update_by,
+        last_update_date,
+        bin_fulfillment_days,
+        no_of_schedules,
+        bin_category,
+        region,
+        STOCK_TYPE,
+        BIN_LOCATION,
+        APPROVALFLAG
+        ) VALUES (
+        jan_rep_id.NEXTVAL,
+        :OrganizationId,
+        :Org,
+        :InventoryItemId,
+        :ItemNo,
+        :Description,
+        :CustomerId,
+        :CustName,
+        :ROQ,
+        SYSDATE,
+        :CreatedBy,
+        SYSDATE,
+        null,
+        null,
+        7,
+        4,
+        :BinCat,
+        :Region,
+        :StockType,
+        :BinLocation,
+        'N'
+        )"),
+        new SalesPlanQuery(22, "Get Pending Replenishment Bins", @"
+        SELECT A.*,
+            (SELECT customer_class_code FROM ra_customers WHERE customer_id = A.customer_id) customer_class_code,
+            (SELECT customer_category FROM jan_pick_forward_control WHERE bill_to_customer_id = A.customer_id) customer_category
+        FROM JAN_CUSTOMER_REPLENISHMENT_TEMP A
+        WHERE A.APPROVALFLAG = 'N'
+          AND A.END_DATE IS NULL"),
+        new SalesPlanQuery(23, "Approve Insert Replenishment Bin", @"
+        INSERT INTO JAN_CUSTOMER_REPLENISHMENT_T (
+        rep_id,
+        organization_id,
+        org,
+        inventory_item_id,
+        item_no,
+        description,
+        customer_id,
+        CUSTOMER_NAME,
+        roq,
+        start_date,
+        created_by,
+        created_date,
+        last_update_by,
+        last_update_date,
+        bin_fulfillment_days,
+        no_of_schedules,
+        bin_category,
+        region,
+        STOCK_TYPE,
+        BIN_LOCATION
+                )
+                SELECT
+                        rep_id,
+                        organization_id,
+                        org,
+                        inventory_item_id,
+                        item_no,
+                        description,
+                        customer_id,
+                        customer_name,
+                        roq,
+                        start_date,
+                        created_by,
+                        created_date,
+                        last_update_by,
+                        last_update_date,
+                        bin_fulfillment_days,
+                        no_of_schedules,
+                        bin_category,
+                        region,
+                        stock_type,
+                        bin_location
+                FROM JAN_CUSTOMER_REPLENISHMENT_TEMP
+                WHERE rep_id = :RepId
+                    AND approvalflag = 'N'"),
+        new SalesPlanQuery(24, "After Approve Update", @"
+        UPDATE JAN_CUSTOMER_REPLENISHMENT_TEMP
+                SET APPROVALFLAG = 'Y',
+                        APPROVEDBY = :ApprovedBy
+                WHERE REP_ID = :RepId
+                    AND APPROVALFLAG = 'N'"),
+        new SalesPlanQuery(25, "Get Active Replenishment Bin Count", @"
+                SELECT COUNT(*)
+                FROM JAN_CUSTOMER_REPLENISHMENT_T
+                WHERE END_DATE IS NULL
+                    AND REGION = :Region
+                    AND INVENTORY_ITEM_ID = :InventoryItemId
+                    AND ORGANIZATION_ID = :OrganizationId
+                    AND CUSTOMER_ID = :CustomerId
+                    AND STOCK_TYPE = :StockType"),
+        new SalesPlanQuery(26, "Close Active Replenishment Bins", @"
+                UPDATE JAN_CUSTOMER_REPLENISHMENT_T
+                SET END_DATE = TO_DATE(:EndDate, 'YYYY-MM-DD'),
+                        LAST_UPDATE_BY = :LastUpdateBy,
+                        LAST_UPDATE_DATE = SYSDATE
+                WHERE END_DATE IS NULL
+                    AND REGION = :Region
+                    AND INVENTORY_ITEM_ID = :InventoryItemId
+                    AND ORGANIZATION_ID = :OrganizationId
+                    AND CUSTOMER_ID = :CustomerId
+                    AND STOCK_TYPE = :StockType"),
+        new SalesPlanQuery(27, "Update Replenishment Bin", @"
+        UPDATE JAN_CUSTOMER_REPLENISHMENT_T
+        SET ROQ = :BinQty,
+        LAST_UPDATE_BY = :LastUpdateBy,
+        LAST_UPDATE_DATE = TO_DATE('06-03-25', 'DD-MM-YY')
+        WHERE rep_id = :RepId AND end_date is null")
+    }.AsReadOnly();
+
+    public static SalesPlanQuery? GetByQueryNumber(int queryNumber)
+    {
+        foreach (SalesPlanQuery query in Queries)
+        {
+            if (query.QueryNumber == queryNumber)
+            {
+                return query;
+            }
+        }
+
+        return null;
+    }
+
+    public static string GetQueryText(int queryNumber)
+    {
+        SalesPlanQuery? query = GetByQueryNumber(queryNumber);
+        if (query is null)
+        {
+            throw new ArgumentOutOfRangeException(nameof(queryNumber), queryNumber, "Unknown sales plan query number.");
+        }
+
+        return query.QueryText;
+    }
 }

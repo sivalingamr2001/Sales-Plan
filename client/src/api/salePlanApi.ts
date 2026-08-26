@@ -21,32 +21,79 @@ export const salesPlanApi = {
     customerName?: string,
     orderedItem?: string,
     parentRegion?: string
-  ) =>
-    apiClient.get<SalesPlan[]>("/SalesPlan", {
-      params: {
-        custName: customerName,
-        ordId:
-          orderedItem && !Number.isNaN(Number(orderedItem))
-            ? Number(orderedItem)
-            : undefined,
-        itemNo: orderedItem || undefined,
-        parentRegion: parentRegion || undefined,
-      },
-    }),
+  ) => {
+    const isOrderId = orderedItem && !Number.isNaN(Number(orderedItem))
+    const inputParams: Record<string, any> = {
+      parentRegion: parentRegion || "%",
+    }
+
+    let queryNumber = 2
+    if (isOrderId) {
+      queryNumber = 1
+      inputParams.ordId = Number(orderedItem)
+    } else {
+      inputParams.custName = customerName || ""
+      if (orderedItem) {
+        inputParams.itemNo = orderedItem
+      }
+    }
+
+    return apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: queryNumber,
+        InputParameters: inputParams,
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as SalesPlan[] }))
+  },
 
   getSalesPlansConsolidated: () =>
-    apiClient.get<SalesPlanConsolidatedData[]>("/SalesPlan/consolidated"),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 3,
+        InputParameters: {},
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as SalesPlanConsolidatedData[] })),
 
   getSalesPlansBreakdown: (orderedItem?: string) =>
-    apiClient.get<SalesPlanBrkUp[]>("/SalesPlan/breakdown", {
-      params: { orderedItem },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 4,
+        InputParameters: {
+          OrderedItem: orderedItem || "",
+        },
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as SalesPlanBrkUp[] })),
 
   getSalesPlansFullBreakdown: () =>
-    apiClient.get<SalesPlanBrkUp[]>("/SalesPlan/full_breakdown"),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 10,
+        InputParameters: {},
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as SalesPlanBrkUp[] })),
 
   getBinRsvHoPendingList: () =>
-    apiClient.get<SalesPlanBrkUp[]>("/SalesPlan/bin-rsv-pend-list"),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 13,
+        InputParameters: {},
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as SalesPlanBrkUp[] })),
 
   insertSalesPlans: async (
     payload: SalesPlanWeekLineRequest[]
@@ -92,19 +139,47 @@ export const salesPlanApi = {
     orgId: number,
     inventoryId: number
   ) =>
-    apiClient.get<MonthlySalesQuantity[]>("/SalesPlan/monthly-quantity", {
-      params: { customerId, orgId, inventoryId },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 28,
+        InputParameters: {
+          CustomerId: customerId,
+          OrgId: orgId,
+          InventoryId: inventoryId,
+        },
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as MonthlySalesQuantity[] })),
 
   getExceptionDetails: (inventoryId: number) =>
-    apiClient.get<any[]>("/SalesPlan/exception-details", {
-      params: { inventoryId },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 12,
+        InputParameters: {
+          InventoryId: inventoryId,
+        },
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as any[] })),
 
   getAllBins: (region: string) =>
-    apiClient.get<any[]>("/SalesPlan/bins", {
-      params: { region },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 16,
+        InputParameters: {
+          IsHO: region === "HO" ? 1 : 0,
+          Region: region,
+          UseSubRegion: false,
+        },
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as any[] })),
 
   createBinRecord: async (
     payload: CreateBinRecordDto,
@@ -124,7 +199,15 @@ export const salesPlanApi = {
   },
 
   getPendingRepBins: () =>
-    apiClient.get<any[]>("/SalesPlan/pending-replenishment-bins"),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 22,
+        InputParameters: {},
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as any[] })),
 
   approveBinRecord: (payload: { repId: number; approvedBy: string }) =>
     apiClient.post("/SalesPlan/approve-bin", payload),
@@ -197,25 +280,79 @@ export const salesPlanApi = {
   },
 
   getAllBinsWithRegion: (region: string) =>
-    apiClient.get<any[]>("/SalesPlan/bins-with-region", {
-      params: { region },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 16,
+        InputParameters: {
+          IsHO: region === "HO" ? 1 : 0,
+          Region: region,
+          UseSubRegion: true,
+        },
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as any[] })),
 
-  getCustomerReplenishmentBins: (regionStr: string) =>
-    apiClient.get<any[]>("/SalesPlan/customer-replenishment-bin", {
-      params: { regionStr },
-    }),
+  getCustomerReplenishmentBins: (regionStr: string) => {
+    const regionsList = !regionStr
+      ? []
+      : regionStr.split(",").map((r: string) => r.trim())
+    return apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 17,
+        InputParameters: {
+          RegionHoCheck: regionStr === "HO" ? "HO" : "OTHER",
+          Regions: regionsList,
+        },
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as any[] }))
+  },
 
   getInventoryItemDetails: (search?: string) =>
-    apiClient.get<InventoryItemDto>("/SalesPlan/inventory-items", {
-      params: { search },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 18,
+        InputParameters: {
+          Search: search || "",
+        },
+        EnableServerSideFiltering: false,
+        Count: 100,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as InventoryItemDto[] })),
 
   getOrgIdByInventoryIdAndOuId: (inventoryId: number, region: string) =>
-    apiClient.get<OrganizationDto>("/SalesPlan/org-by-inventory-and-ou", {
-      params: { inventoryId, region },
-    }),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 20,
+        InputParameters: {
+          InventoryId: inventoryId,
+          Region: region,
+        },
+        EnableServerSideFiltering: false,
+        Count: 1,
+        PageNumber: 1,
+      })
+      .then((res) => {
+        const list = res.data.data as OrganizationDto[]
+        return {
+          ...res,
+          data: list && list.length > 0 ? list[0] : (null as any),
+        }
+      }),
 
   getAllRegionDetails: () =>
-    apiClient.get<RegionDetailsDto[]>("/SalesPlan/regions"),
+    apiClient
+      .post<any>("/SalesPlan/execute-query", {
+        QueryNumber: 15,
+        InputParameters: {},
+        EnableServerSideFiltering: false,
+        Count: 100000,
+        PageNumber: 1,
+      })
+      .then((res) => ({ ...res, data: res.data.data as RegionDetailsDto[] })),
 }

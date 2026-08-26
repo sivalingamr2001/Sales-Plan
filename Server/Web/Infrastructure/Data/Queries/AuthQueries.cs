@@ -40,24 +40,6 @@ public class AuthQueries
     WHERE 
         LOWER(ra.customer_name) LIKE '%' || LOWER(:searchTerm) || '%'";
 
-    //public const string GetCustomerNameByRegionAndSearch = @"
-    //    SELECT DISTINCT
-    //        ra.customer_id,
-    //        ra.customer_name,
-    //        (SELECT customer_category FROM jan_pick_forward_control WHERE bill_to_customer_id = ra.customer_id AND ROWNUM = 1) customer_category,
-    //        (select customer_class_code from ra_customers where customer_id=ra.customer_id)customer_class_code
-    //    FROM
-    //        ra_customers ra
-    //        INNER JOIN ra_addresses_all ad ON ra.customer_id = ad.customer_id
-    //        INNER JOIN ra_site_uses_all ras ON
-    //            ad.address_id = ras.address_id
-    //        AND
-    //            ras.site_use_code = 'BILL_TO'
-    //        INNER JOIN ra_territories rt ON ras.territory_id = rt.territory_id
-    //    WHERE
-
-    //        LOWER(ra.customer_name) LIKE '%' || LOWER(:searchTerm) || '%'";
-
     public const string GetCustomerNameByRegionAndSearch = @"
 SELECT DISTINCT
     customer_id,

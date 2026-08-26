@@ -1,3 +1,80 @@
+import { useMemo } from "react"
+import type { ColDef } from "ag-grid-community"
+import { toast } from "sonner"
+import type {
+  SalesPlan,
+  SalesPlanConsolidatedData,
+  SalesPlanBrkUp,
+  RepBinType,
+} from "@/api/types"
+import { salesPlanApi } from "@/api/salePlanApi"
+import { OrderedItemHover } from "./OrderedItemHover"
+
+export function getCurrentTargetMonthOptions() {
+  const labels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ]
+  const now = new Date()
+  const currentVal = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
+  const currentLabel = `${labels[now.getMonth()]} '${String(now.getFullYear()).slice(-2)}`
+
+  const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const nextVal = `${nextDate.getFullYear()}${String(nextDate.getMonth() + 1).padStart(2, "0")}`
+  const nextLabel = `${labels[nextDate.getMonth()]} '${String(nextDate.getFullYear()).slice(-2)}`
+
+  return [
+    { value: currentVal, label: currentLabel },
+    { value: nextVal, label: nextLabel },
+  ]
+}
+
+export function formatDateString(value: any) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return String(value)
+  const day = String(date.getDate()).padStart(2, "0")
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const year = date.getFullYear()
+  return `${day}-${month}-${year}`
+}
+
+export function formatMonthCapsule(value: any) {
+  if (!value) return ""
+  const strVal = String(value).trim()
+  const match = strVal.match(/^(\d{4})(\d{2})$/)
+  if (!match) return strVal
+  const [_, year, monthNum] = match
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ]
+  const mIdx = parseInt(monthNum, 10) - 1
+  if (mIdx < 0 || mIdx > 11) return strVal
+  return `${months[mIdx]} '${year.slice(-2)}`
+}
+
+export function useColumns() {
   const salesPlanColumns = useMemo<ColDef<SalesPlan>[]>(
     () => [
       {
@@ -18,27 +95,21 @@
         headerName: "Target Month",
         width: 150,
         pinned: "left",
-        // 1. Fallback to ORD_FF_DT month if cell value is empty
         valueGetter: (params) => {
-          // If a value is already saved/selected, use it
           if (params.data?.TARGET_MON_FINAL) {
             return params.data.TARGET_MON_FINAL
           }
 
-          // Otherwise, parse ORD_FF_DT to set the default month
           const ordDateStr = params.data?.ORD_FF_DT
           if (!ordDateStr) return ""
 
           const date = new Date(ordDateStr)
           if (isNaN(date.getTime())) return ""
 
-          // Returns full month name (e.g., "January", "February")
-          // Match this string format to your monthOptions.value format
           return date.toLocaleString("en-US", { month: "long" })
         },
         cellRenderer: (params: any) => {
           const monthOptions = getCurrentTargetMonthOptions()
-          // 2. Use params.value (which now resolves through the valueGetter)
           const selectedValue = params.value ?? ""
 
           return (
@@ -50,23 +121,22 @@
                     key={monthOption.value}
                     type="button"
                     onClick={() => {
-                      // Set the clicked row's target month value
                       params.node.setDataValue(
                         "TARGET_MON_FINAL",
                         monthOption.value
                       )
 
-                      // Select all rows that match this month
                       const target = String(monthOption.value)
                       params.api.forEachNode((node: any) => {
                         const v = String(node.data?.TARGET_MON_FINAL ?? "")
                         if (v === target) node.setSelected(true)
                       })
                     }}
-                    className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive
-                      ? "bg-emerald-600 text-white"
-                      : "text-slate-600 hover:text-slate-900"
-                      }`}
+                    className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${
+                      isActive
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
                     {monthOption.label}
                   </button>
@@ -150,15 +220,12 @@
         filter: true,
       },
       { field: "CUSTOMER_CATEGORY", headerName: "Cust Category" },
-
-      // --- REDUCED SHORT COMPACT QUANTITY & METRIC COLUMNS ---
       {
         field: "PEND_VAL",
         headerName: "Pend Value",
         type: "numericColumn",
         width: 100,
       },
-
       { field: "ORD_TYPE", headerName: "Order Type", filter: false },
       { field: "CTYPE", headerName: "C-Type", filter: false },
       {
@@ -196,7 +263,6 @@
     []
   )
 
-  // Consolidated: show five primary columns across full width
   const consolidatedColumns = useMemo<ColDef<SalesPlanConsolidatedData>[]>(
     () => [
       { field: "ORG", headerName: "Org", flex: 1, cellClass: "font-semibold" },
@@ -226,234 +292,6 @@
     ],
     []
   )
-
-  // const binColumns = useMemo<ColDef<BinType>[]>(
-  //   () => [
-  //     {
-  //       headerName: "",
-  //       filter: false,
-  //       floatingFilter: false,
-  //       width: 50,
-  //       pinned: "left",
-  //       checkboxSelection: true,
-  //       headerCheckboxSelection: true,
-  //       suppressHeaderMenuButton: true,
-  //       resizable: false,
-  //     },
-  //     {
-  //       field: "TARGET_MON_FINAL",
-  //       headerName: "Target Month",
-  //       width: 150,
-  //       pinned: "left",
-  //       // 1. Fallback to ORD_FF_DT month if cell value is empty
-  //       valueGetter: (params) => {
-  //         // If a value is already saved/selected, use it
-  //         if (params.data?.TARGET_MON_FINAL) {
-  //           return params.data.TARGET_MON_FINAL
-  //         }
-  //       },
-  //       cellRenderer: (params: any) => {
-  //         const monthOptions = getCurrentTargetMonthOptions()
-  //         const isRowSelected = params.node?.isSelected?.() ?? false
-  //         // 2. Use params.value (which now resolves through the valueGetter)
-  //         const selectedValue = isRowSelected ? (params.value ?? "") : ""
-
-  //         return (
-  //           <div className="inline-flex h-5.5 items-center rounded-full bg-slate-100 p-0.5">
-  //             {monthOptions.map((monthOption) => {
-  //               const isActive = selectedValue === monthOption.value
-  //               return (
-  //                 <button
-  //                   key={monthOption.value}
-  //                   type="button"
-  //                   onClick={() => {
-  //                     if (!params.node.isSelected()) {
-  //                       params.node.setSelected(true)
-  //                     }
-
-  //                     // Set the clicked row's target month value
-  //                     params.node.setDataValue(
-  //                       "TARGET_MON_FINAL",
-  //                       monthOption.value
-  //                     )
-
-  //                     // Select all rows that match this month
-  //                     const target = String(monthOption.value)
-  //                     params.api.forEachNode((node: any) => {
-  //                       const v = String(node.data?.TARGET_MON_FINAL ?? "")
-  //                       if (v === target) node.setSelected(true)
-  //                     })
-  //                   }}
-  //                   className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive
-  //                     ? "bg-emerald-600 text-white"
-  //                     : "text-slate-600 hover:text-slate-900"
-  //                     }`}
-  //                 >
-  //                   {monthOption.label}
-  //                 </button>
-  //               )
-  //             })}
-  //           </div>
-  //         )
-  //       },
-  //     },
-  //     {
-  //       field: "COMP_PRODUCT_FLAG",
-  //       headerName: "Stock Type",
-  //       width: 170, // Slightly widened to comfortably fit both buttons
-  //       pinned: "left",
-  //       valueGetter: (params) => {
-  //         return params.data?.COMP_PRODUCT_FLAG ?? ""
-  //       },
-  //       cellRenderer: (params: any) => {
-  //         const options = ["FG", "FC", "RM"]
-  //         const isRowSelected = params.node?.isSelected?.() ?? false
-  //         const selectedValue = isRowSelected ? (params.value ?? "") : ""
-
-  //         return (
-  //           <div className="inline-flex h-5.5 items-center rounded-full bg-slate-100 p-0.5">
-  //             {options.map((option) => {
-  //               const isActive = selectedValue === option
-  //               return (
-  //                 <button
-  //                   key={option}
-  //                   type="button"
-  //                   onClick={() => {
-  //                     if (!params.node.isSelected()) {
-  //                       params.node.setSelected(true)
-  //                     }
-  //                     // Set the value directly to the clicked type
-  //                     params.node.setDataValue("COMP_PRODUCT_FLAG", option)
-  //                   }}
-  //                   className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive
-  //                     ? "bg-blue-600 text-white"
-  //                     : "text-slate-600 hover:text-slate-900"
-  //                     }`}
-  //                 >
-  //                   {option}
-  //                 </button>
-  //               )
-  //             })}
-  //           </div>
-  //         )
-  //       },
-  //     },
-  //     // {
-  //     //   field: "EMERGENCY_FLAG",
-  //     //   headerName: "Emg Bin",
-  //     //   width: 130,
-  //     //   pinned: "left",
-  //     //   valueGetter: (params) => {
-  //     //     const rawValue = Number(params.data?.EMERGENCY_FLAG ?? 0)
-  //     //     return rawValue === 1 ? 1 : 0
-  //     //   },
-  //     //   cellRenderer: (params: any) => {
-  //     //     const currentValue = Number(params.value ?? 0)
-  //     //     const isActive = currentValue === 1
-
-  //     //     return (
-  //     //       <div className="inline-flex h-5.5 items-center rounded-full bg-slate-100 p-0.5">
-  //     //         <button
-  //     //           type="button"
-  //     //           onClick={() => {
-  //     //             if (!params.node.isSelected()) {
-  //     //               params.node.setSelected(true)
-  //     //             }
-  //     //             const newValue = isActive ? 0 : 1
-  //     //             params.node.setDataValue("EMERGENCY_FLAG", newValue)
-  //     //           }}
-  //     //           className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${
-  //     //             isActive
-  //     //               ? "bg-orange-600 text-white"
-  //     //               : "text-slate-600 hover:text-slate-900"
-  //     //           }`}
-  //     //         >
-  //     //           Emergency Bin
-  //     //         </button>
-  //     //       </div>
-  //     //     )
-  //     //   },
-  //     // },
-  //     // {
-  //     //   field: "BIN_FF_DT",
-  //     //   headerName: "Bin FF Date",
-  //     //   width: 120,
-  //     //   filter: "agTextColumnFilter",
-  //     //   filterParams: { defaultOption: "contains" },
-  //     //   filterValueGetter: (params: any) =>
-  //     //     formatDateString(params.data?.CREATION_DATE),
-  //     //   valueFormatter: (p) => (p.value ? formatDateString(p.value) : ""),
-  //     // },
-  //     {
-  //       field: "CUST_NAME",
-  //       headerName: "Customer Name",
-  //       pinned: "left",
-  //       filter: true,
-  //     },
-  //     { field: "PARENT_REGION", headerName: "Parent Region" },
-  //     { field: "REGION", headerName: "Region" },
-  //     { field: "ITEM_NO", headerName: "Item Number", filter: true },
-  //     { field: "DESCRIPTION", headerName: "Description" },
-  //     { field: "ORG", headerName: "Org" },
-  //     { field: "AMS_CAT", headerName: "AMS Cat" },
-  //     { field: "RRS_CAT", headerName: "RRS Cat" },
-
-  //     // --- QUANTITIES & TARGET METRICS ---
-  //     {
-  //       field: "REQ_QTY",
-  //       headerName: "Req Qty",
-  //       type: "numericColumn",
-  //       width: 100,
-  //     },
-  //     {
-  //       field: "EXCEPTION_QTY",
-  //       headerName: "Exception Qty",
-  //       type: "numericColumn",
-  //       width: 120,
-  //     },
-  //     // --- LOGISTICAL CONDITIONAL FIELDS & METADATA ---
-  //     { field: "BIN_WK_NO", headerName: "Bin Wk No" },
-  //     { field: "HO_TARGET_MONTH", headerName: "HO Target Month" },
-  //     { field: "PROD_COMMIT_MONTH", headerName: "Prod Commit Month" },
-  //     { field: "BRANCH_TARGET_MONTH", headerName: "Branch Target Month" },
-  //     {
-  //       field: "BRANCH_VALIDATED_DATE",
-  //       headerName: "Branch Validated",
-  //       valueFormatter: (params: any) => formatDateString(params.value),
-  //     },
-  //     { field: "EMERGENCY_FLAG", headerName: "Emergency Flag", width: 120 },
-  //     {
-  //       field: "COMP_PRODUCT_FLAG",
-  //       headerName: "Comp Product Flag",
-  //       width: 130,
-  //     },
-  //     {
-  //       field: "CUSTOMER_ID",
-  //       headerName: "Cust ID",
-  //       type: "numericColumn",
-  //       width: 100,
-  //     },
-  //     {
-  //       field: "REP_ID",
-  //       headerName: "Rep ID",
-  //       type: "numericColumn",
-  //       width: 100,
-  //     },
-  //     {
-  //       field: "ORGANIZATION_ID",
-  //       headerName: "Org ID",
-  //       type: "numericColumn",
-  //       width: 100,
-  //     },
-  //     {
-  //       field: "INVENTORY_ITEM_ID",
-  //       headerName: "Inv Item ID",
-  //       type: "numericColumn",
-  //       width: 110,
-  //     },
-  //   ],
-  //   []
-  // )
 
   const binColumns = useMemo<ColDef<RepBinType>[]>(
     () => [
@@ -505,10 +343,11 @@
                         if (v === target) node.setSelected(true)
                       })
                     }}
-                    className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive
-                      ? "bg-emerald-600 text-white"
-                      : "text-slate-600 hover:text-slate-900"
-                      }`}
+                    className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${
+                      isActive
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
                     {monthOption.label}
                   </button>
@@ -522,40 +361,6 @@
         field: "STOCK_TYPE",
         headerName: "Stock Type",
         width: 170,
-        // valueGetter: (params) => {
-        //   return params.data?.COM_PRODUCT_FLAG ?? ""
-        // },
-        // cellRenderer: (params: any) => {
-        //   const options = ["FG", "FC", "RM"]
-        //   const isRowSelected = params.node?.isSelected?.() ?? false
-        //   const selectedValue = isRowSelected ? (params.value ?? "") : ""
-
-        //   return (
-        //     <div className="inline-flex h-5.5 items-center rounded-full bg-slate-100 p-0.5">
-        //       {options.map((option) => {
-        //         const isActive = selectedValue === option
-        //         return (
-        //           <button
-        //             key={option}
-        //             type="button"
-        //             onClick={() => {
-        //               if (!params.node.isSelected()) {
-        //                 params.node.setSelected(true)
-        //               }
-        //               params.node.setDataValue("COM_PRODUCT_FLAG", option)
-        //             }}
-        //             className={`relative z-10 flex h-5 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive
-        //               ? "bg-blue-600 text-white"
-        //               : "text-slate-600 hover:text-slate-900"
-        //               }`}
-        //           >
-        //             {option}
-        //           </button>
-        //         )
-        //       })}
-        //     </div>
-        //   )
-        // },
       },
       {
         field: "ITEM_NO",
@@ -602,8 +407,6 @@
         width: 110,
         cellRenderer: (params: any) => {
           const maxQuantity = Number(params.data?.ROQ ?? 0)
-
-          // Use REQ_QTY if user changed it, otherwise default to ROQ
           const value =
             params.data?.REQ_QTY !== undefined
               ? Number(params.data.REQ_QTY)
@@ -620,16 +423,10 @@
                   0,
                   Math.min(Number(e.target.value) || 0, maxQuantity)
                 )
-
-                // FIX 1: Explicitly write property into the raw object reference
                 if (params.data) {
                   params.data.REQ_QTY = newValue
                 }
-
-                // Update row dataset node memory
                 params.node.setDataValue("REQ_QTY", newValue)
-
-                // Force layout transaction flush
                 params.api.applyTransaction({ update: [params.data] })
               }}
               className="w-full rounded border border-gray-300 px-1 py-0.5 text-sm"
@@ -637,35 +434,6 @@
           )
         },
       },
-      // {
-      //   headerName: "Actions",
-      //   width: 110,
-      //   cellRenderer: (params: any) => (
-      //     <Button
-      //       size="xs"
-      //       variant="outline"
-      //       onClick={() => {
-      //         const maxQuantity = Number(params.data?.ROQ ?? 0);
-
-      //         // FIX 2: Generate fallback if user clicks edit without editing input first
-      //         const finalizedData = {
-      //           ...params.data,
-      //           REQ_QTY: params.data?.REQ_QTY !== undefined ? params.data.REQ_QTY : maxQuantity
-      //         };
-
-      //         // Log complete updated object to browser console
-      //         console.log("Selected Row Data with REQ_QTY:", finalizedData);
-
-      //         // If you have an edit modal function call it here:
-      //         // handleOpenEdit(finalizedData as RepBinType);
-      //       }}
-      //       className="h-7"
-      //     >
-      //       <Pencil className="mr-1 h-3 w-3" />
-      //       Edit
-      //     </Button>
-      //   ),
-      // },
     ],
     []
   )
@@ -750,7 +518,7 @@
                       })
                       try {
                         const response =
-                          await SalesPlanService.getBreakupExceptionQty({
+                          await salesPlanApi.getBreakupExceptionQty({
                             ORG: params.data?.ORG ?? null,
                             INVENTORY_ITEM_ID: params.data?.INVENTORY_ITEM_ID,
                             SELECTED_MONTH: newMonth,
@@ -780,7 +548,11 @@
                         )
                       }
                     }}
-                    className={`relative z-10 flex h-5 items-center justify-center px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive ? "rounded-2xl bg-emerald-600 text-white" : "rounded-2xl text-slate-600 hover:text-slate-900"}`}
+                    className={`relative z-10 flex h-5 items-center justify-center px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${
+                      isActive
+                        ? "rounded-2xl bg-emerald-600 text-white"
+                        : "rounded-2xl text-slate-600 hover:text-slate-900"
+                    }`}
                   >
                     {monthOption.label}
                   </button>
@@ -831,7 +603,6 @@
           formatDateString(params.data?.CREATION_DATE),
         valueFormatter: (p) => (p.value ? formatDateString(p.value) : ""),
       },
-      // { field: "CREATION_DATE", headerName: "Creation Date", width: 120, filter: true, valueFormatter: (p) => p.value ? formatDateString(p.value) : "" },
       {
         field: "ORDERED_ITEM",
         headerName: "Ordered Item",
@@ -861,18 +632,6 @@
         width: 100,
         type: "numericColumn",
       },
-      // {
-      //   field: "SALE_QTY",
-      //   headerName: "Sale Qty",
-      //   width: 100,
-      //   type: "numericColumn",
-      // },
-      // {
-      //   field: "NO_OF_CUSTS",
-      //   headerName: "# Customers",
-      //   width: 110,
-      //   type: "numericColumn",
-      // },
       {
         field: "BIN_QTY",
         headerName: "Bin Qty",
@@ -945,7 +704,6 @@
       { field: "CUSTOMER_CATEGORY", headerName: "Cust Category", width: 130 },
       { field: "SP_REMARKS", headerName: "SP Remarks", width: 160 },
       { field: "B3_STATUS", headerName: "B3 Status", width: 110 },
-
       {
         field: "PROD_COMMIT_MONTH",
         headerName: "Prod Commit Month",
@@ -1040,7 +798,7 @@
                       })
                       try {
                         const response =
-                          await SalesPlanService.getBreakupExceptionQty({
+                          await salesPlanApi.getBreakupExceptionQty({
                             ORG: params.data?.ORG ?? null,
                             INVENTORY_ITEM_ID: params.data?.INVENTORY_ITEM_ID,
                             SELECTED_MONTH: newMonth,
@@ -1070,7 +828,11 @@
                         )
                       }
                     }}
-                    className={`relative z-10 flex h-5 items-center justify-center px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${isActive ? "rounded-2xl bg-emerald-600 text-white" : "rounded-2xl text-slate-600 hover:text-slate-900"}`}
+                    className={`relative z-10 flex h-5 items-center justify-center px-2 py-1 text-[11px] font-semibold transition-colors duration-200 ${
+                      isActive
+                        ? "rounded-2xl bg-emerald-600 text-white"
+                        : "rounded-2xl text-slate-600 hover:text-slate-900"
+                    }`}
                   >
                     {monthOption.label}
                   </button>
@@ -1080,37 +842,6 @@
           )
         },
       },
-      // {
-      //   field: "EXCEPTION_QTY",
-      //   headerName: "Exc Qty",
-      //   width: 60,
-      //   type: "numericColumn",
-      //   pinned: "left",
-      // },
-      // {
-      //   field: "EXCESS_QTY",
-      //   headerName: "TEQ Qty",
-      //   width: 80,
-      //   type: "numericColumn",
-      //   pinned: "left",
-      // },
-      // {
-      //   field: "OCQ_QTY",
-      //   headerName: "CAP OCQ Qty",
-      //   type: "numericColumn",
-      //   width: 120,
-      //   pinned: "left",
-      // },
-      // {
-      //   field: "ORD_FF_DT",
-      //   headerName: "Ord FF Dt",
-      //   width: 120,
-      //   filter: "agTextColumnFilter",
-      //   filterParams: { defaultOption: "contains" },
-      //   filterValueGetter: (params: any) =>
-      //     formatDateString(params.data?.ORD_FF_DT),
-      //   valueFormatter: (p) => (p.value ? formatDateString(p.value) : ""),
-      // },
       {
         field: "CREATION_DATE",
         headerName: "Creation Date",
@@ -1121,7 +852,6 @@
           formatDateString(params.data?.CREATION_DATE),
         valueFormatter: (p) => (p.value ? formatDateString(p.value) : ""),
       },
-      // { field: "CREATION_DATE", headerName: "Creation Date", width: 120, filter: true, valueFormatter: (p) => p.value ? formatDateString(p.value) : "" },
       {
         field: "ORDERED_ITEM",
         headerName: "Ordered Item",
@@ -1139,18 +869,6 @@
       },
       { field: "ORG", headerName: "Org", width: 80 },
       { field: "AMS_CAT", headerName: "AMS Cat", width: 110 },
-      // {
-      //   field: "SALE_QTY",
-      //   headerName: "Sale Qty",
-      //   width: 100,
-      //   type: "numericColumn",
-      // },
-      // {
-      //   field: "NO_OF_CUSTS",
-      //   headerName: "# Customers",
-      //   width: 110,
-      //   type: "numericColumn",
-      // },
       { field: "SUB_REGION", headerName: "Sub Region", width: 120 },
       {
         field: "CUSTOMER_NAME",
@@ -1175,3 +893,12 @@
     ],
     []
   )
+
+  return {
+    salesPlanColumns,
+    consolidatedColumns,
+    binColumns,
+    breakupColumns,
+    pendBinColumn,
+  }
+}
